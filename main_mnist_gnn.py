@@ -26,7 +26,7 @@ class Net(nn.Module):
         self.layers.append(nn.Linear(256, 10))
 
     def forward(self, x, cond_drop=False, u=None):
-        xxx = []
+        xxx = [x]
         # flatten
         if not cond_drop:
             for layer in self.layers:
