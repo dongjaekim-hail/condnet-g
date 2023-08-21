@@ -62,7 +62,8 @@ class gnn(nn.Module):
         x = F.relu(self.conv2(x, edge_index))
         x = F.relu(self.conv3(x, edge_index))
         x = self.fc1(x)
-        x = F.softmax(x, dim=1)
+        x = F.sigmoid(x)
+        # bernoulli sampling
         return x
 
 class condg_exp():
