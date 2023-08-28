@@ -65,22 +65,26 @@ class gnn(nn.Module):
 
     def forward(self, x, edge_index):
         print(edge_index)
-        x = F.relu(self.conv1(x, edge_index))
+        print(x.shape, edge_index.shape)
+        batch_adj = torch.stack([edge_index for _ in range(x.shape[0])])
+
+        x = F.relu(self.conv1(x.unsqueeze(-1), batch_adj))
         x = F.relu(self.conv2(x, edge_index))
         x = F.relu(self.conv3(x, edge_index))
+        print(x.shape)
         x = self.fc1(x)
         p = F.sigmoid(x)
         # bernoulli sampling
         p = p * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
         u = torch.bernoulli(p).to(self.device)
-        x = p * u + (1 - p) * (1 - u)
+        x = p * u + (1 - p) * (1 - u) # 논문에서는 각 레이어마다 policy가 적용되었기때문인데, 온오프 노드를 만들거기 때문에 이 연산은 필요없을 듯...
         return x
 
 class condg_exp():
     def __init__(self, args, num_input = 28**2):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.num_input = num_input
         self.mlp = Net().to(self.device)
-
         # get args
         self.lambda_s = args.lambda_s
         self.lambda_v = args.lambda_v
@@ -137,7 +141,16 @@ class condg_exp():
         self.optimizer_mlp = optim.Adam(self.mlp.parameters(), lr=0.001)
         self.optimizer_gnn = optim.Adam(self.gnn.parameters(), lr=0.001)
 
-    def load_mnist(self):
+    def update_pol(self, loss, loss_pol):
+        self.optimizer_mlp.zero_grad()
+        self.optimizer_gnn.zero_grad()
+
+        loss_pol.backward()  # it needs to be checked [TODO]
+        self.optimizer_mlp.step()
+        self.optimizer_gnn.step()
+
+    def run_exp(self):
+
         # datasets load mnist data
         train_dataset = datasets.MNIST(
             root="../data/mnist",
@@ -163,21 +176,11 @@ class condg_exp():
             batch_size=self.BATCH_SIZE,
             shuffle=False
         )
-        return train_loader, test_loader
 
-    def update_pol(self, loss, loss_pol):
-        self.optimizer_mlp.zero_grad()
-        self.optimizer_gnn.zero_grad()
-
-        loss_pol.backward()  # it needs to be checked [TODO]
-        self.optimizer_mlp.step()
-        self.optimizer_gnn.step()
-
-    def run_exp(self):
         self.mlp.train()
         self.gnn.train()
+
         # hs = torch.ones().to(self.device)
-        train_loader, test_loader = self.load_mnist()
         accs = 0
         loss = 0
         loss_pol = 0
@@ -188,12 +191,18 @@ class condg_exp():
             # get batch
             inputs, labels = data
             print(inputs.shape)
-
+            inputs = inputs.view(-1, self.num_input).to(self.device)
             if bn == 0:
                 # run the first mlp
                 y_pred, hs = self.mlp(inputs)
-                hs = np.stack(hs) # changing dimension to 1 for putting hs vector in gnn
-                us = self.gnn(hs, self.adj) # run the gnn
+                hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1) # changing dimension to 1 for putting hs vector in gnn
+
+                # hs = torch.transpose(hs, 0, 1)
+                print(hs.shape)
+                print(len(self.adj))
+                print(type(self.adj))
+                adj = torch.Tensor(self.adj)
+                us = self.gnn(hs, adj) # run the gnn
                 y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
             else:
                 # run the second mlp
@@ -242,6 +251,14 @@ class condg_exp():
 
         return accs
 
+def main(args):
+
+    # create model
+    model = condg_exp(args)
+    model.run_exp()
+
+
+
 
 if __name__=='__main__':
     # make arguments and defaults for the parameters
@@ -264,12 +281,12 @@ if __name__=='__main__':
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 
-    wandb.init(project="condnet",
-               config=args.parse_args().__dict__
-               )
+    # wandb.init(project="condnet",
+    #            config=args.parse_args().__dict__
+    #            )
+    #
+    # wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
 
-    wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
+    main(args=args.parse_args())
 
-    condg_exp(args=args.parse_args()).run_exp()
-
-    wandb.finish()
+    # wandb.finish()
