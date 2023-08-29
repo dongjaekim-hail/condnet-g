@@ -13,6 +13,7 @@ from datetime import datetime
 
 from torch_geometric.nn import DenseSAGEConv
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Net(nn.Module):
     def __init__(self):
@@ -30,7 +31,6 @@ class Net(nn.Module):
         # flatten
         if not cond_drop:
             for layer in self.layers:
-                print(x.shape)
                 x = layer(x)
                 x = F.relu(x)
                 # dropout
@@ -41,8 +41,6 @@ class Net(nn.Module):
                 raise ValueError('u should be given')
             # conditional activation
             for layer in self.layers:
-                print(u)
-                print(len(u))
                 x = x * u[:layer.out_features] # where it cuts off
                 x = layer(x)
                 x = F.relu(x)
@@ -56,7 +54,6 @@ class Net(nn.Module):
 
 class gnn(nn.Module):
     def __init__(self, num_nodes):
-        print(num_nodes)
         super().__init__()
         self.conv1 = DenseSAGEConv(1, 128)
         self.conv2 = DenseSAGEConv(128, 128)
@@ -64,27 +61,23 @@ class gnn(nn.Module):
         self.fc1 = nn.Linear(128, int(num_nodes))
 
     def forward(self, x, edge_index):
-        print(edge_index)
-        print(x.shape, edge_index.shape)
         batch_adj = torch.stack([edge_index for _ in range(x.shape[0])])
 
         x = F.relu(self.conv1(x.unsqueeze(-1), batch_adj))
         x = F.relu(self.conv2(x, edge_index))
         x = F.relu(self.conv3(x, edge_index))
-        print(x.shape)
         x = self.fc1(x)
         p = F.sigmoid(x)
         # bernoulli sampling
-        p = p * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-        u = torch.bernoulli(p).to(self.device)
-        x = p * u + (1 - p) * (1 - u) # 논문에서는 각 레이어마다 policy가 적용되었기때문인데, 온오프 노드를 만들거기 때문에 이 연산은 필요없을 듯...
-        return x
+        # p = p * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
+        u = torch.bernoulli(p).to(device)
+        # x = p * u + (1 - p) * (1 - u) # 논문에서는 각 레이어마다 policy가 적용되었기때문인데, 온오프 노드를 만들거기 때문에 이 연산은 필요없을 듯...
+        return u
 
 class condg_exp():
     def __init__(self, args, num_input = 28**2):
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.num_input = num_input
-        self.mlp = Net().to(self.device)
+        self.mlp = Net().to(device)
         # get args
         self.lambda_s = args.lambda_s
         self.lambda_v = args.lambda_v
@@ -134,9 +127,7 @@ class condg_exp():
             return adjmatrix, trainable_nodes
 
         adj_, nodes_ = adj(self.mlp, num_input)
-        print(nodes_)
-        print(nodes_.sum())
-        self.gnn = gnn(nodes_.sum()).to(self.device)
+        self.gnn = gnn(nodes_.sum()).to(device)
         self.adj = adj_
         self.optimizer_mlp = optim.Adam(self.mlp.parameters(), lr=0.001)
         self.optimizer_gnn = optim.Adam(self.gnn.parameters(), lr=0.001)
@@ -190,25 +181,18 @@ class condg_exp():
         for i, data in enumerate(train_loader, 0):
             # get batch
             inputs, labels = data
-            print(inputs.shape)
-            inputs = inputs.view(-1, self.num_input).to(self.device)
+            inputs = inputs.view(-1, self.num_input).to(device)
+            adj = torch.Tensor(self.adj)
             if bn == 0:
                 # run the first mlp
                 y_pred, hs = self.mlp(inputs)
                 hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1) # changing dimension to 1 for putting hs vector in gnn
-
-                # hs = torch.transpose(hs, 0, 1)
-                print(hs.shape)
-                print(len(self.adj))
-                print(type(self.adj))
-                adj = torch.Tensor(self.adj)
                 us = self.gnn(hs, adj) # run the gnn
-                y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
             else:
                 # run the second mlp
-                hs = np.stack(hs)
-                us = self.gnn(hs, self.adj) # run the gnn
                 y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
+                hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1)  # changing dimension to 1 for putting hs vector in gnn
+                us = self.gnn(hs, adj) # run the gnn
             bn += 1
 
             # cal acc and rewards for pol
@@ -218,14 +202,14 @@ class condg_exp():
 
             # compute mlp loss, loss_pol(policy gradient maybe?)
             # [mlp loss]
-            c = nn.CrossEntropyLoss(y_pred, labels.to(self.device))
+            c = nn.CrossEntropyLoss(y_pred, labels.to(device))
 
             # [loss_pol]
             # Compute the regularization loss L
             # policies => p_i => hidden activity / layer_masks => u_i => Bernoulli(p_i)
             L = c + self.lambda_s * (
-                    torch.pow(torch.stack(hs).mean(axis=1) - torch.tensor(self.tau).to(self.device), 2).mean() +
-                    torch.pow(torch.stack(hs).mean(axis=2) - torch.tensor(self.tau).to(self.device), 2).mean())
+                    torch.pow(torch.stack(hs).mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean() +
+                    torch.pow(torch.stack(hs).mean(axis=2) - torch.tensor(self.tau).to(device), 2).mean())
 
             L += self.lambda_v * (-1) * (torch.stack(hs).to('cpu').var(axis=1).mean() +
                                          torch.stack(hs).to('cpu').var(axis=2).mean())
