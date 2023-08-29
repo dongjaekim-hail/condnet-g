@@ -121,6 +121,8 @@ class model_condnet(nn.Module):
         # last layer just go without dynamic sampling
         h = self.mlp[-1](h)
         h = F.softmax(h, dim=1)
+        print(policies)
+        print(type(policies))
         return h, policies, sample_probs, layer_masks
 
 def main(args):
@@ -202,6 +204,9 @@ def main(args):
             y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
 
             c = C(outputs, labels.to(model.device))
+            print(type(outputs))
+            print(type(outputs[0]))
+            print(type(outputs[0][0]))
 
             # Compute the regularization loss L
 

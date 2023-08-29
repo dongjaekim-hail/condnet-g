@@ -1,0 +1,47 @@
+C:\Users\dadol\OneDrive\바탕 화면\HAIL\cong\condnet-g\condnet-g\main_mnist.py:227: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+<class 'list'>
+Epoch: 0, Batch: 0, Cost: 2.3027567863, PG:6.0698843002, Acc: 0.090, Tau: 0.400
+<class 'list'>
+Epoch: 0, Batch: 1, Cost: 2.3026509285, PG:6.0626111031, Acc: 0.111, Tau: 0.399
+<class 'list'>
+Epoch: 0, Batch: 2, Cost: 2.3024494648, PG:6.0494260788, Acc: 0.107, Tau: 0.397
+<class 'list'>
+Epoch: 0, Batch: 3, Cost: 2.3027036190, PG:6.0331325531, Acc: 0.072, Tau: 0.396
+<class 'list'>
+Epoch: 0, Batch: 4, Cost: 2.3026084900, PG:6.0139589310, Acc: 0.109, Tau: 0.394
+<class 'list'>
+Epoch: 0, Batch: 5, Cost: 2.3025510311, PG:5.9944348335, Acc: 0.105, Tau: 0.391
+<class 'list'>
+Epoch: 0, Batch: 6, Cost: 2.3025889397, PG:5.9762296677, Acc: 0.098, Tau: 0.387
+<class 'list'>
+Epoch: 0, Batch: 7, Cost: 2.3026287556, PG:5.9603939056, Acc: 0.127, Tau: 0.385
+<class 'list'>
+Epoch: 0, Batch: 8, Cost: 2.3025207520, PG:5.9473018646, Acc: 0.125, Tau: 0.383
+<class 'list'>
+Epoch: 0, Batch: 9, Cost: 2.3027184010, PG:5.9382529259, Acc: 0.082, Tau: 0.379
+<class 'list'>
+Epoch: 0, Batch: 10, Cost: 2.3025949001, PG:5.9316964149, Acc: 0.111, Tau: 0.377
+<class 'list'>
+Epoch: 0, Batch: 11, Cost: 2.3025896549, PG:5.9283189774, Acc: 0.105, Tau: 0.374
+<class 'list'>
+Epoch: 0, Batch: 12, Cost: 2.3026242256, PG:5.9271292686, Acc: 0.104, Tau: 0.373
+<class 'list'>
+Epoch: 0, Batch: 13, Cost: 2.3025221825, PG:5.9272465706, Acc: 0.096, Tau: 0.371
+Traceback (most recent call last):
+  File "C:\Users\dadol\OneDrive\바탕 화면\HAIL\cong\condnet-g\condnet-g\main_mnist.py", line 331, in <module>
+    main(args=args.parse_args())
+  File "C:\Users\dadol\OneDrive\바탕 화면\HAIL\cong\condnet-g\condnet-g\main_mnist.py", line 223, in main
+    policy_optimizer.step()
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\optimizer.py", line 280, in wrapper
+    out = func(*args, **kwargs)
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\optimizer.py", line 33, in _use_grad
+    ret = func(self, *args, **kwargs)
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\sgd.py", line 76, in step
+    sgd(params_with_grad,
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\sgd.py", line 222, in sgd
+    func(params,
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\sgd.py", line 249, in _single_tensor_sgd
+    d_p = d_p.add(param, alpha=weight_decay)
+KeyboardInterrupt
+<class 'list'>

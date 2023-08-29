@@ -1,0 +1,30 @@
+C:\Users\dadol\OneDrive\바탕 화면\HAIL\cong\condnet-g\condnet-g\main_mnist.py:226: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+Epoch: 0, Batch: 0, Cost: 2.3025934696, PG:6.0728158951, Acc: 0.123, Tau: 0.399
+Epoch: 0, Batch: 1, Cost: 2.3025581837, PG:6.0655994415, Acc: 0.115, Tau: 0.399
+Epoch: 0, Batch: 2, Cost: 2.3025326729, PG:6.0526428223, Acc: 0.111, Tau: 0.398
+Epoch: 0, Batch: 3, Cost: 2.3026831150, PG:6.0359287262, Acc: 0.092, Tau: 0.396
+Epoch: 0, Batch: 4, Cost: 2.3026199341, PG:6.0165576935, Acc: 0.113, Tau: 0.394
+Epoch: 0, Batch: 5, Cost: 2.3025732040, PG:5.9966759682, Acc: 0.098, Tau: 0.391
+Epoch: 0, Batch: 6, Cost: 2.3024933338, PG:5.9778914452, Acc: 0.105, Tau: 0.389
+Epoch: 0, Batch: 7, Cost: 2.3024971485, PG:5.9615592957, Acc: 0.115, Tau: 0.386
+Epoch: 0, Batch: 8, Cost: 2.3025941849, PG:5.9484500885, Acc: 0.104, Tau: 0.383
+Epoch: 0, Batch: 9, Cost: 2.3024432659, PG:5.9382448196, Acc: 0.119, Tau: 0.380
+Epoch: 0, Batch: 10, Cost: 2.3025820255, PG:5.9319171906, Acc: 0.111, Tau: 0.377
+Epoch: 0, Batch: 11, Cost: 2.3025603294, PG:5.9281558990, Acc: 0.102, Tau: 0.375
+Traceback (most recent call last):
+  File "C:\Users\dadol\OneDrive\바탕 화면\HAIL\cong\condnet-g\condnet-g\main_mnist.py", line 330, in <module>
+    main(args=args.parse_args())
+  File "C:\Users\dadol\OneDrive\바탕 화면\HAIL\cong\condnet-g\condnet-g\main_mnist.py", line 222, in main
+    policy_optimizer.step()
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\optimizer.py", line 280, in wrapper
+    out = func(*args, **kwargs)
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\optimizer.py", line 33, in _use_grad
+    ret = func(self, *args, **kwargs)
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\sgd.py", line 76, in step
+    sgd(params_with_grad,
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\sgd.py", line 222, in sgd
+    func(params,
+  File "C:\Users\dadol\miniconda3\envs\hail\lib\site-packages\torch\optim\sgd.py", line 265, in _single_tensor_sgd
+    param.add_(d_p, alpha=-lr)
+KeyboardInterrupt

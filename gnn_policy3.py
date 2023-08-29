@@ -26,7 +26,7 @@ class Net(nn.Module):
         self.layers.append(nn.Linear(512, 256))
         self.layers.append(nn.Linear(256, 10))
 
-    def forward(self, x, cond_drop=False, u=None):
+    def forward(self, x, cond_drop=False, us=None):
         hs = [x]
         # flatten
         if not cond_drop:
@@ -37,12 +37,11 @@ class Net(nn.Module):
                 x = nn.Dropout(p=0.3)(x)
                 hs.append(x)
         else:
-            if u is None:
+            if us is None:
                 raise ValueError('u should be given')
             # conditional activation
             for layer in self.layers:
-                x = x * u[:layer.out_features] # where it cuts off
-                x = layer(x)
+                x = layer(x) * us[:layer.out_features] # where it cuts off [TODO]
                 x = F.relu(x)
                 # dropout
                 x = nn.Dropout(p=0.3)(x)
@@ -61,6 +60,7 @@ class gnn(nn.Module):
         self.fc1 = nn.Linear(128, int(num_nodes))
 
     def forward(self, x, edge_index):
+        print(x.shape)
         batch_adj = torch.stack([edge_index for _ in range(x.shape[0])])
 
         x = F.relu(self.conv1(x.unsqueeze(-1), batch_adj))
@@ -188,33 +188,35 @@ class condg_exp():
                 y_pred, hs = self.mlp(inputs)
                 hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1) # changing dimension to 1 for putting hs vector in gnn
                 us = self.gnn(hs, adj) # run the gnn
+                print(1)
             else:
                 # run the second mlp
                 y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
                 hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1)  # changing dimension to 1 for putting hs vector in gnn
                 us = self.gnn(hs, adj) # run the gnn
+                print(1)
             bn += 1
 
             # cal acc and rewards for pol
             # calculate accuracy
-            # pred = torch.argmax(y_pred.to('cpu'), dim=1) why?
-            acc = np.sum(y_pred == torch.tensor(labels.reshape(-1))) / labels.shape[0]
+            y_pred = torch.argmax(y_pred.to('cpu'), dim=1) # why should it be used??
+            acc = torch.sum(y_pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
 
             # compute mlp loss, loss_pol(policy gradient maybe?)
             # [mlp loss]
-            c = nn.CrossEntropyLoss(y_pred, labels.to(device))
+            c = nn.CrossEntropyLoss()(y_pred.float(), labels.to(device).float())
 
             # [loss_pol]
             # Compute the regularization loss L
             # policies => p_i => hidden activity / layer_masks => u_i => Bernoulli(p_i)
+            # Todo : Loss 계산 방식 (행 평균, 열 평균)
             L = c + self.lambda_s * (
-                    torch.pow(torch.stack(hs).mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean() +
-                    torch.pow(torch.stack(hs).mean(axis=2) - torch.tensor(self.tau).to(device), 2).mean())
-
-            L += self.lambda_v * (-1) * (torch.stack(hs).to('cpu').var(axis=1).mean() +
-                                         torch.stack(hs).to('cpu').var(axis=2).mean())
+                    torch.pow(hs.mean(axis=0) - torch.tensor(self.tau).to(device), 2).mean() +
+                    torch.pow(hs.mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean())
+            L += self.lambda_v * (-1) * (hs.to('cpu').var(axis=0).mean() +
+                                         hs.to('cpu').var(axis=1).mean())
             # Compute loss_pol
-            logp = torch.log(torch.cat(hs)).sum(axis=1).mean()
+            logp = torch.log(hs).sum(axis=1).mean()
             pg = self.lambda_pg * c * (-logp) + L
 
             # update policy
@@ -226,12 +228,12 @@ class condg_exp():
             loss_pol += pg.to('cpu').item()
 
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': pg.item(),
-                       'train/batch_tau': self.tau})
+            # wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': pg.item(),
+            #            'train/batch_tau': self.tau})
 
             # print PG.item(), and acc with name
             print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'
-                  .format(1, i, c.item(), pg.item(), acc, torch.stack(us).mean().item()))
+                  .format(1, i, c.item(), pg.item(), acc, us.mean().item()))
 
         return accs
 
@@ -259,7 +261,7 @@ if __name__=='__main__':
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.7)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=512)
+    args.add_argument('--BATCH_SIZE', type=int, default=3)
 
     # get time in string to save as file name
     now = datetime.now()
