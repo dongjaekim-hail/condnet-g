@@ -7,13 +7,16 @@ from torchvision import transforms, datasets # 데이터를 다루기 위한 Tor
 
 import torch.nn as nn
 import torch.nn.functional as F
-import wandb
+# import wandb
 
 from datetime import datetime
 
 from torch_geometric.nn import DenseSAGEConv
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# bn 1 to n : data 같은 것에 대해서 돌아야 됨
+# mlp us.shape => (1562, 1)으로 / gnn에서 fc( ,1)
 
 class Net(nn.Module):
     def __init__(self):
@@ -41,7 +44,8 @@ class Net(nn.Module):
                 raise ValueError('u should be given')
             # conditional activation
             for layer in self.layers:
-                x = layer(x) * us[:layer.out_features] # where it cuts off [TODO]
+                x = x[0] * us[0,:,:layer.in_features] # where it cuts off [TODO]
+                x = layer(x) # ??? 각 노드 간의 연결을 끊거나 살리는 것을 us matrix 로 어떻게 연산....
                 x = F.relu(x)
                 # dropout
                 x = nn.Dropout(p=0.3)(x)
@@ -57,10 +61,10 @@ class gnn(nn.Module):
         self.conv1 = DenseSAGEConv(1, 128)
         self.conv2 = DenseSAGEConv(128, 128)
         self.conv3 = DenseSAGEConv(128, 128)
-        self.fc1 = nn.Linear(128, int(num_nodes))
+        self.fc1 = nn.Linear(128, 1)
 
     def forward(self, x, edge_index):
-        print(x.shape)
+        print(x.shape) # hidden activity shape
         batch_adj = torch.stack([edge_index for _ in range(x.shape[0])])
 
         x = F.relu(self.conv1(x.unsqueeze(-1), batch_adj))
@@ -127,6 +131,7 @@ class condg_exp():
             return adjmatrix, trainable_nodes
 
         adj_, nodes_ = adj(self.mlp, num_input)
+        print(nodes_.sum())
         self.gnn = gnn(nodes_.sum()).to(device)
         self.adj = adj_
         self.optimizer_mlp = optim.Adam(self.mlp.parameters(), lr=0.001)
