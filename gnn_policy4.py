@@ -40,7 +40,7 @@ class Mlp(nn.Module):
             for layer in self.layers:
                 us = us.squeeze()
                 x = x * us[:,:layer.in_features] # where it cuts off [TODO]
-                x = layer(x) # ??? 각 노드 간의 연결을 끊거나 살리는 것을 us matrix 로 어떻게 연산....
+                x = layer(x) 
                 x = F.relu(x)
                 # dropout
                 x = nn.Dropout(p=0.3)(x)
