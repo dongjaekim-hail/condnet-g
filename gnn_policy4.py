@@ -71,7 +71,7 @@ class Gnn(nn.Module):
         p = p * (0.7 - 0.1) + 0.1
         u = torch.bernoulli(p).to(device) # [TODO] Error : probability -> not a number(nan), p is not in range of 0 to 1
         # x = p * u + (1 - p) * (1 - u) # 논문에서는 각 레이어마다 policy가 적용되었기때문인데, 온오프 노드를 만들거기 때문에 이 연산은 필요없을 듯...
-        return u
+        return u, p
 
 class Condnet_model(nn.Module):
     def __init__(self, args, num_input = 28**2):
@@ -128,21 +128,32 @@ class Condnet_model(nn.Module):
         adjmatrix[adjmatrix != 0] = 1
         return adjmatrix, trainable_nodes
 
-    def forward_propagation(self, inputs, adj, num_iteration, us):
-        if num_iteration == 1:
-            # run the first mlp
-            y_pred, hs = self.mlp(inputs)
-            hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1)  # changing dimension to 1 for putting hs vector in gnn
-            us = self.gnn(hs, adj)  # run the gnn
-        else:
-            # run the second mlp
-            y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
-            hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1)  # changing dimension to 1 for putting hs vector in gnn
-            us = self.gnn(hs, adj)  # run the gnn
+    # 1. inference로 돌리는 함수 (mlp 모든 unit이 1로 켜져있는 경우 (이때 업데이트는 의미없음) ) => model.evaluation
+    def infer_forward_propagation(self, inputs, adj):
+        self.mlp.eval()
+        self.gnn.eval()
+        # run the first mlp
+        y_pred, hs = self.mlp(inputs)
+        hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
+                       dim=1)  # changing dimension to 1 for putting hs vector in gnn
+        us, _ = self.gnn(hs, adj)  # run gnn
+        outputs, hs = self.mlp(inputs, cond_drop=True, us=us)
 
-        return y_pred, us, hs
+        return outputs, us, hs
 
-    def compute_cost(self, y_pred, labels, hs):
+    # 2. train으로 돌리는 함수
+    def forward_propagation(self, inputs, adj, us):
+        self.mlp.train()
+        self.gnn.train()
+        # run mlp
+        y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
+        hs = torch.cat(tuple(hs[i] for i in range(len(hs))), dim=1)  # changing dimension to 1 for putting hs vector in gnn
+        us, p = self.gnn(hs, adj)  # run gnn
+        outputs, hs = self.mlp(inputs, cond_drop=True, us=us)
+
+        return outputs, us, hs, p
+
+    def compute_cost(self, y_pred, labels, us, p):
         y_pred = torch.argmax(y_pred.to('cpu'), dim=1)  # why should it be used??
 
         # Compute the loss
@@ -150,13 +161,13 @@ class Condnet_model(nn.Module):
 
         # Compute the regularization loss L
         L = c + self.lambda_s * (
-                torch.pow(hs.mean(axis=0) - torch.tensor(self.tau).to(device), 2).mean() +
-                torch.pow(hs.mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean())
-        L += self.lambda_v * (-1) * (hs.to('cpu').var(axis=0).mean() +
-                                     hs.to('cpu').var(axis=1).mean())
+                torch.pow(us.mean(axis=0) - torch.tensor(self.tau).to(device), 2).mean() +
+                torch.pow(us.mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean())
+        L += self.lambda_v * (-1) * (us.to('cpu').var(axis=0).mean() +
+                                     us.to('cpu').var(axis=1).mean())
 
         # Compute the policy gradient (PG) loss
-        logp = torch.log(hs).sum(axis=1).mean()
+        logp = torch.log(p).sum(axis=1).mean()
         PG = self.lambda_pg * c * (-logp) + L
 
         return c, PG
@@ -219,11 +230,11 @@ class Condnet_model(nn.Module):
                 inputs = inputs.view(-1, self.num_input).to(device)
 
                 # Forward Propagation
-                us_prev = us
-                y_pred, us, hs = self.forward_propagation(inputs, adj_, num_iteration, us_prev)
+                ouputs, us, hs = self.infer_forward_propagation(inputs, adj_)
+                y_pred, us, hs, p = self.forward_propagation(inputs, adj_, us)
 
                 # Compute Cost
-                c, PG = self.compute_cost(y_pred, labels, hs)
+                c, PG = self.compute_cost(y_pred, labels, us, p)
                 costs += c.to('cpu').item()
                 PGs += PG.to('cpu').item()
 
