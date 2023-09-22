@@ -5,6 +5,7 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms, datasets # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
 
+from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 # import wandb
@@ -158,16 +159,22 @@ class Condnet_model(nn.Module):
 
         # Compute the loss
         c = nn.CrossEntropyLoss()(y_pred.float(), labels.to(device).float())
+        c /= y_pred.shape[0]
 
-        # Compute the regularization loss L
-        L = c + self.lambda_s * (
+        Ls = self.lambda_s * (
                 torch.pow(us.mean(axis=0) - torch.tensor(self.tau).to(device), 2).mean() +
                 torch.pow(us.mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean())
+        Ls /= y_pred.shape[0]
+
+        # Compute the regularization loss L
+        L = c + Ls
         L += self.lambda_v * (-1) * (us.to('cpu').var(axis=0).mean() +
                                      us.to('cpu').var(axis=1).mean())
 
         # Compute the policy gradient (PG) loss
         logp = torch.log(p).sum(axis=1).mean()
+        logp /= y_pred.shape[0]
+
         PG = self.lambda_pg * c * (-logp) + L
 
         return c, PG
@@ -204,8 +211,8 @@ class Condnet_model(nn.Module):
             shuffle=False
         )
 
-        optimizer_mlp = optim.Adam(self.mlp.parameters(), lr=0.001)
-        optimizer_gnn = optim.Adam(self.gnn.parameters(), lr=0.001)
+        optimizer_mlp = optim.Adam(self.mlp.parameters(), lr=self.learning_rate)
+        optimizer_gnn = optim.Adam(self.gnn.parameters(), lr=self.learning_rate)
 
         adj_, nodes_ = self.adj(self.mlp)
 
@@ -219,7 +226,7 @@ class Condnet_model(nn.Module):
             num_iteration = 0
             us = torch.zeros((1562, 1562))
 
-            for i, data in enumerate(train_loader, start=0):
+            for i, data in enumerate(tqdm(train_loader), start=0):
                 optimizer_mlp.zero_grad()
                 optimizer_gnn.zero_grad()
 
@@ -235,6 +242,8 @@ class Condnet_model(nn.Module):
 
                 # Compute Cost
                 c, PG = self.compute_cost(y_pred, labels, us, p)
+                # c /= data[0].shape[0]
+                # PG /= data[0].shape[0]
                 costs += c.to('cpu').item()
                 PGs += PG.to('cpu').item()
 
@@ -267,7 +276,7 @@ if __name__=='__main__':
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.7)
     args.add_argument('--learning_rate', type=float, default=7e-2)
-    args.add_argument('--BATCH_SIZE', type=int, default=512)
+    args.add_argument('--BATCH_SIZE', type=int, default=200)
 
     model = Condnet_model(args=args.parse_args())
     model.run_model()
