@@ -266,8 +266,8 @@ if __name__=='__main__':
     args.add_argument('--max_epochs', type=int, default=1000)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.7)
-    args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=3)
+    args.add_argument('--learning_rate', type=float, default=7e-2)
+    args.add_argument('--BATCH_SIZE', type=int, default=512)
 
     model = Condnet_model(args=args.parse_args())
     model.run_model()
