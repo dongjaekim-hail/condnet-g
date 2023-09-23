@@ -315,7 +315,7 @@ if __name__=='__main__':
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.7)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=64)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
 
     # get time in string to save as file name
     now = datetime.now()

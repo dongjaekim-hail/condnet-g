@@ -258,35 +258,35 @@ class Condnet_model(nn.Module):
                                dim=1)  # changing dimension to 1 for putting hs vector in gnn
                 hs = hs.detach()
 
-                us, p = self.gnn(hs, adj_)  # run gnn
-                y_pred, hs = self.mlp(inputs, cond_drop=True, us=us)
+                # us, p = self.gnn(hs, adj_)  # run gnn
+                y_pred, hs = self.mlp(inputs)
 
                 # Compute Cost
                 # c, PG = self.compute_cost(y_pred, labels, us, p)
 
                 c = self.C(y_pred, labels.to(device))
 
-                Ls = self.lambda_s * (
-                        torch.pow(us.mean(axis=0) - torch.tensor(self.tau).to(device), 2).mean() +
-                        torch.pow(us.mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean())
-                # Compute the regularization loss L
-                L = c + Ls
-                L += self.lambda_v * (-1) * (us.to(device).var(axis=0).mean() +
-                                             us.to(device).var(axis=1).mean())
-                # Compute the policy gradient (PG) loss
-                logp = torch.log(p).sum(axis=1).mean()
-                PG = self.lambda_pg * c * (-logp) + L
+                # Ls = self.lambda_s * (
+                #         torch.pow(us.mean(axis=0) - torch.tensor(self.tau).to(device), 2).mean() +
+                #         torch.pow(us.mean(axis=1) - torch.tensor(self.tau).to(device), 2).mean())
+                # # Compute the regularization loss L
+                # L = c + Ls
+                # L += self.lambda_v * (-1) * (us.to(device).var(axis=0).mean() +
+                #                              us.to(device).var(axis=1).mean())
+                # # Compute the policy gradient (PG) loss
+                # logp = torch.log(p).sum(axis=1).mean()
+                # PG = self.lambda_pg * c * (-logp) + L
 
                 # Backward Optimization
-                PG.backward()  # it needs to be checked [TODO]
+                c.backward()  # it needs to be checked [TODO]
                 optimizer_mlp.step()
-                optimizer_gnn.step()
+                # optimizer_gnn.step()
 
                 # update surrogate
                 self.mlp_surrogate.load_state_dict(self.mlp.state_dict())
 
                 costs += c.to('cpu').item()
-                PGs += PG.to('cpu').item()
+                # PGs += PG.to('cpu').item()
 
 
                 # Calculate accuracy
@@ -297,9 +297,10 @@ class Condnet_model(nn.Module):
                 ouputs = torch.argmax(ouputs.to('cpu'), dim=1)
                 acc_ = torch.sum(ouputs==torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
                 accsbf += acc_
-                if (i % 1) == 0:
+                if (i % 50) == 0:
                     # Print PG.item(), and acc with name
-                    print('\nEpoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Accbf {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, acc_))
+                    # print('\nEpoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Accbf {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, acc_))
+                    print('\nEpoch: {}, Batch: {}, Cost: {:.10f}, Acc: {:.3f}, Accbf {:.3f}'.format(epoch, i, c.item(),  acc, acc_))
 
                     # print how may are turned
                     print('TAU: {}'.format(us.cpu().mean().item()))
@@ -323,7 +324,7 @@ if __name__=='__main__':
     args.add_argument('--condnet_min_prob', type=float, default=1)
     args.add_argument('--condnet_max_prob', type=float, default=1)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=64)
+    args.add_argument('--BATCH_SIZE', type=int, default=512)
     args.add_argument('--compact', type=bool, default=True)
 
     model = Condnet_model(args=args.parse_args())
