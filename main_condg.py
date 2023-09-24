@@ -61,7 +61,8 @@ class Gnn(nn.Module):
         self.conv1 = DenseSAGEConv(1, 128)
         self.conv2 = DenseSAGEConv(128, 128)
         self.conv3 = DenseSAGEConv(128, 128)
-        self.fc1 = nn.Linear(128, 1)
+        self.fc1 = nn.Linear(128, 64)
+        self.fc2 = nn.Linear(64,1)
         self.minprob = minprob
         self.maxprob = maxprob
 
@@ -70,10 +71,11 @@ class Gnn(nn.Module):
         batch_adj = torch.stack([torch.Tensor(adj) for _ in range(hs.shape[0])])
         batch_adj = batch_adj.to(device)
 
-        hs = F.relu(self.conv1(hs.unsqueeze(-1), batch_adj))
-        hs = F.relu(self.conv2(hs, batch_adj))
-        hs = F.relu(self.conv3(hs, batch_adj))
-        hs = self.fc1(hs)
+        hs = F.tanh(self.conv1(hs.unsqueeze(-1), batch_adj))
+        hs = F.tanh(self.conv2(hs, batch_adj))
+        hs = F.tanh(self.conv3(hs, batch_adj))
+        hs = F.tanh(self.fc1(hs))
+        hs = self.fc2(hs)
         p = F.sigmoid(hs)
         # bernoulli sampling
         p = p * (self.maxprob - self.minprob) + self.minprob
@@ -269,7 +271,8 @@ def main(args):
 
             # Compute the policy gradient (PG) loss
             logp = torch.log(p.squeeze()).sum(axis=1).mean()
-            PG = lambda_pg * c * (-logp) + L
+            PG = lambda_pg * c/p.squeeze().mean() * (-logp) + L
+            # PG = lambda_pg * c * (-logp) + L
 
             PG.backward() # it needs to be checked [TODO]
             mlp_optimizer.step()
@@ -291,10 +294,10 @@ def main(args):
             # wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, ))
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, us.mean().detach().item()))
 
         # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
+        # wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -362,16 +365,16 @@ if __name__=='__main__':
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=20)
-    args.add_argument('--lambda_v', type=float, default=2)
+    args.add_argument('--lambda_s', type=float, default=10)
+    args.add_argument('--lambda_v', type=float, default=10)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-1)
-    args.add_argument('--tau', type=float, default=0.5)
+    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--tau', type=float, default=0.2)
     args.add_argument('--max_epochs', type=int, default=1000)
-    args.add_argument('--condnet_min_prob', type=float, default=1)
-    args.add_argument('--condnet_max_prob', type=float, default=1)
+    args.add_argument('--condnet_min_prob', type=float, default=0.1)
+    args.add_argument('--condnet_max_prob', type=float, default=0.6)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=512)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=True)
 
     # get time in string to save as file name
