@@ -221,7 +221,11 @@ def main(args):
         accsbf = 0
         PGs = 0
         num_iteration = 0
+        taus = 0
         us = torch.zeros((1562, 1562))
+
+        gnn_policy.train()
+        mlp_model.train()
 
         # run for each batch
         for i, data in enumerate(train_loader, 0):
@@ -244,7 +248,7 @@ def main(args):
             # ouputs, hs     = self.infer_forward_propagation(inputs, adj_)
             # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
             mlp_surrogate.eval()
-            outputs, hs = mlp_surrogate(inputs)
+            outputs_1, hs = mlp_surrogate(inputs)
             hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
                            dim=1)  # changing dimension to 1 for putting hs vector in gnn
             hs = hs.detach()
@@ -281,23 +285,28 @@ def main(args):
             # calculate accuracy
             pred = torch.argmax(outputs.to('cpu'), dim=1)
             acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+            pred_1 = torch.argmax(outputs_1.to('cpu'), dim=1)
+            accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1)).item()/ labels.shape[0])
 
             # addup loss and acc
             costs += c.to('cpu').item()
             accs += acc
+            accsbf += accbf
             PGs += PG.to('cpu').item()
 
             # surrogate
             mlp_surrogate.load_state_dict(mlp_model.state_dict())
 
+            tau = us.mean().detach().item()
+            taus += tau
             # wandb log training/batch
-            # wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc,'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, us.mean().detach().item()))
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf,tau ))
 
         # wandb log training/epoch
-        # wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn, 'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -306,59 +315,79 @@ def main(args):
         accs = 0
         PGs = 0
 
-        # model.eval()
-        # with torch.no_grad():
-        #     # calculate accuracy on test set
-        #     acc = 0
-        #     bn = 0
-        #     for i, data in enumerate(test_loader, 0):
-        #         bn += 1
-        #         # get batch
-        #         inputs, labels = data
-        #
-        #         # make one hot vector
-        #         y_batch_one_hot = torch.zeros(labels.shape[0], 10)
-        #         y_batch_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1,).tolist()] = 1
-        #
-        #         # get output
-        #         outputs, policies, sample_probs, layer_masks = model(torch.tensor(inputs))
-        #
-        #         # calculate accuracy
-        #         pred = torch.argmax(outputs, dim=1).to('cpu')
-        #         acc  = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
-        #
-        #         # make labels one hot vector
-        #         y_one_hot = torch.zeros(labels.shape[0], 10)
-        #         y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
-        #
-        #         c = C(outputs, labels.to(model.device))
-        #
-        #         # Compute the regularization loss L
-        #
-        #         L = c + lambda_s * (torch.pow(torch.stack(policies).mean(axis=1) - torch.tensor(tau).to(model.device), 2).mean() +
-        #                             torch.pow(torch.stack(policies).mean(axis=2) - torch.tensor(tau).to(model.device), 2).mean())
-        #
-        #         L += lambda_v * (-1) * (torch.stack(policies).var(axis=1).mean() +
-        #                                 torch.stack(policies).var(axis=2).mean())
-        #
-        #
-        #
-        #         # Compute the policy gradient (PG) loss
-        #         logp = torch.log(torch.cat(policies)).sum(axis=1).mean()
-        #         PG = lambda_pg * c * (-logp) + L
-        #
-        #         # wandb log test/batch
-        #         wandb.log({'test/batch_acc': acc, 'test/batch_cost': c.to('cpu').item(), 'test/batch_pg': PG.to('cpu').item()})
-        #
-        #         # addup loss and acc
-        #         costs += c.to('cpu').item()
-        #         accs += acc
-        #         PGs += PG.to('cpu').item()
-        #     #print accuracy
-        #     print('Test Accuracy: {}'.format(accs / bn))
-        #
-        #     # wandb log test/epoch
-        #     wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn})
+        gnn_policy.eval()
+        mlp_model.eval()
+        with torch.no_grad():
+
+            bn = 0
+            costs = 0
+            accs = 0
+            accsbf = 0
+            PGs = 0
+            num_iteration = 0
+            taus = 0
+            us = torch.zeros((1562, 1562))
+
+            gnn_policy.train()
+            mlp_model.train()
+
+            # run for each batch
+            for i, data in enumerate(test_loader, 0):
+
+                bn += 1
+                # get batch
+                inputs, labels = data
+                # get batch
+
+                inputs = inputs.view(-1, num_inputs).to(device)
+
+                # Forward Propagation
+                # ouputs, hs     = self.infer_forward_propagation(inputs, adj_)
+                # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
+                mlp_surrogate.eval()
+                outputs_1, hs = mlp_surrogate(inputs)
+                hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
+                               dim=1)  # changing dimension to 1 for putting hs vector in gnn
+                hs = hs.detach()
+
+                us, p = gnn_policy(hs, adj_)  # run gnn
+                outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
+
+                # make labels one hot vector
+                y_one_hot = torch.zeros(labels.shape[0], 10)
+                y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
+
+                c = C(outputs, labels.to(device))
+                # Compute the regularization loss L
+
+                L = c + lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean() +
+                                    torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean())
+
+                L += lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
+                                        p.squeeze().var(axis=1).mean())
+
+                # Compute the policy gradient (PG) loss
+                logp = torch.log(p.squeeze()).sum(axis=1).mean()
+                PG = lambda_pg * c * (-logp) + L
+
+                # calculate accuracy
+                pred = torch.argmax(outputs.to('cpu'), dim=1)
+                acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+                pred_1 = torch.argmax(outputs_1.to('cpu'), dim=1)
+                accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1)).item() / labels.shape[0])
+
+                # addup loss and acc
+                costs += c.to('cpu').item()
+                accs += acc
+                accsbf += accbf
+                PGs += PG.to('cpu').item()
+
+                tau = us.mean().detach().item()
+                taus += tau
+
+            # wandb log training/epoch
+            wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
+                       'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn})
 
 if __name__=='__main__':
     # make arguments and defaults for the parameters
@@ -366,7 +395,7 @@ if __name__=='__main__':
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
     args.add_argument('--lambda_s', type=float, default=10)
-    args.add_argument('--lambda_v', type=float, default=10)
+    args.add_argument('--lambda_v', type=float, default=1)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.2)
@@ -375,18 +404,18 @@ if __name__=='__main__':
     args.add_argument('--condnet_max_prob', type=float, default=0.6)
     args.add_argument('--learning_rate', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=256)
-    args.add_argument('--compact', type=bool, default=True)
+    args.add_argument('--compact', type=bool, default=False)
 
     # get time in string to save as file name
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 
-    # wandb.init(project="condnet",
-    #             config=args.parse_args().__dict__
-    #             )
+    wandb.init(project="condgnet",
+                config=args.parse_args().__dict__
+                )
 
-    # wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
+    wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
 
     main(args=args.parse_args())
 
-    # wandb.finish()
+    wandb.finish()
