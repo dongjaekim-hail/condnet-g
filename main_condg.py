@@ -271,7 +271,7 @@ def main(args):
 
             # Compute the policy gradient (PG) loss
             logp = torch.log(p.squeeze()).sum(axis=1).mean()
-            PG = lambda_pg * c/p.squeeze().mean() * (-logp) + L
+            PG = lambda_pg * c * (-logp) + L
             # PG = lambda_pg * c * (-logp) + L
 
             PG.backward() # it needs to be checked [TODO]
