@@ -286,7 +286,7 @@ def main(args):
             pred = torch.argmax(outputs.to('cpu'), dim=1)
             acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
             pred_1 = torch.argmax(outputs_1.to('cpu'), dim=1)
-            accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1)).item()/ labels.shape[0])
+            accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
 
             # addup loss and acc
             costs += c.to('cpu').item()
@@ -374,7 +374,7 @@ def main(args):
                 pred = torch.argmax(outputs.to('cpu'), dim=1)
                 acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
                 pred_1 = torch.argmax(outputs_1.to('cpu'), dim=1)
-                accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1)).item() / labels.shape[0])
+                accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
 
                 # addup loss and acc
                 costs += c.to('cpu').item()
