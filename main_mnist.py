@@ -321,7 +321,7 @@ if __name__=='__main__':
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 
-    wandb.init(project="condnet",
+    wandb.init(project="condgnet",
                 config=args.parse_args().__dict__
                 )
 

@@ -45,7 +45,7 @@ class Mlp(nn.Module):
                 len_out = layer.in_features
                 x = x * us[:,len_in:len_in+len_out] # where it cuts off [TODO]
                 x = layer(x)
-                x = F.relu(x)
+                x = F.sigmoid(x)
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
                 len_in = len_out
@@ -60,8 +60,8 @@ class Gnn(nn.Module):
         super().__init__()
         self.conv1 = DenseSAGEConv(1, hidden_size)
         self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
-        self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
-        self.fc1 = nn.Linear(hidden_size, 1)
+        self.conv3 = DenseSAGEConv(hidden_size, 1)
+        # self.fc1 = nn.Linear(32, 1, bias=False)
         # self.fc2 = nn.Linear(64,1, bias=False)
         self.minprob = minprob
         self.maxprob = maxprob
@@ -77,7 +77,7 @@ class Gnn(nn.Module):
         hs = F.sigmoid(self.conv2(hs, batch_adj))
         hs = F.sigmoid(self.conv3(hs, batch_adj))
         hs_conv = hs
-        hs = self.fc1(hs)
+        # hs = self.fc1(hs)
         # hs = self.fc2(hs)
         p = F.sigmoid(hs)
         # bernoulli sampling
@@ -225,7 +225,6 @@ def main(args):
         PGs = 0
         num_iteration = 0
         taus = 0
-        Ls = 0
         us = torch.zeros((1562, 1562))
 
         gnn_policy.train()
@@ -297,7 +296,6 @@ def main(args):
             accs += acc
             accsbf += accbf
             PGs += PG.to('cpu').item()
-            Ls += L.to('cpu').item()
 
             # surrogate
             mlp_surrogate.load_state_dict(mlp_model.state_dict())
@@ -305,13 +303,13 @@ def main(args):
             tau = us.mean().detach().item()
             taus += tau
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc,'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc,'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
             print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf,tau ))
 
         # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn, 'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs/bn, 'train/epoch_PG': Ls/bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn, 'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -331,7 +329,6 @@ def main(args):
             PGs = 0
             num_iteration = 0
             taus = 0
-            Ls = 0
             us = torch.zeros((1562, 1562))
 
             gnn_policy.train()
@@ -387,14 +384,13 @@ def main(args):
                 accs += acc
                 accsbf += accbf
                 PGs += PG.to('cpu').item()
-                Ls += L.to('cpu').item()
 
                 tau = us.mean().detach().item()
                 taus += tau
 
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
-                       'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn})
+                       'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn})
 
 if __name__=='__main__':
     # make arguments and defaults for the parameters
@@ -422,7 +418,7 @@ if __name__=='__main__':
                 config=args.parse_args().__dict__
                 )
 
-    wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
+    wandb.run.name = "condnet_onlyg_mlp_mnist_{}".format(dt_string)
 
     main(args=args.parse_args())
 
