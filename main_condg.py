@@ -157,7 +157,7 @@ def adj(model, bidirect = True, last_layer = True, edge2itself = True):
         # make sure every element that is non-zero is 1
     adjmatrix[adjmatrix != 0] = 1
     return adjmatrix, trainable_nodes
-def main(args):
+def main(args, dt_string):
     # get args
     lambda_s = args.lambda_s
     lambda_v = args.lambda_v
@@ -396,8 +396,8 @@ def main(args):
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
                        'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn})
         # save model
-        torch.save(mlp_model.state_dict(), './mlp_model.pt')
-        torch.save(gnn_policy.state_dict(), './gnn_policy.pt')
+        torch.save(mlp_model.state_dict(), './mlp_model_'+ dt_string +'.pt')
+        torch.save(gnn_policy.state_dict(), './gnn_policy_'+ dt_string +'.pt')
 
 if __name__=='__main__':
     # make arguments and defaults for the parameters
@@ -427,6 +427,6 @@ if __name__=='__main__':
 
     wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
 
-    main(args=args.parse_args())
+    main(args=args.parse_args(), dt_string=dt_string)
 
     wandb.finish()
