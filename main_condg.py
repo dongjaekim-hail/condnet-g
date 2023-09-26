@@ -395,7 +395,9 @@ def main(args):
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
                        'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn})
-
+        # save model
+        torch.save(mlp_model.state_dict(), './mlp_model.pt')
+        torch.save(gnn_policy.state_dict(), './gnn_policy.pt')
 
 if __name__=='__main__':
     # make arguments and defaults for the parameters
