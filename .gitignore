@@ -1,2 +1,12 @@
 /dat_sub/ADHD_EO.mat
 /dat_sub/TIC_EO.mat
+/.idea/.gitignore
+/.idea/aws.xml
+/.idea/condnet-g.iml
+/wandb/debug-cli.dongjaekim.log
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/wandb/settings
+/.idea/vcs.xml
