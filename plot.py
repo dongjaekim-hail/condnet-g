@@ -6,7 +6,7 @@ api = wandb.Api()
 entity, project = "hails", "condgnet"
 runs = api.runs(entity + "/" + project)
 
-desired_run_name_pattern1 = "s=7.0_v=1.2_tau=0.9"
+desired_run_name_pattern1 = "s=7.0_v=1.2_tau=0.3"
 # desired_run_name_pattern2 = "cond_tau=0.3"
 
 data_list1 = []
@@ -64,13 +64,13 @@ for index, row in runs_df2.iterrows():
 mean_values2 = runs_df2['history'].apply(lambda x: x['test/epoch_acc_bf']).mean()
 ci_lower2 = mean_values2 - 0.05
 ci_upper2 = mean_values2 + 0.05
-ax.plot(x, mean_values2, label="Normal NN Accuracy", color='skyblue')
+ax.plot(x, mean_values2, label="Inference NN Accuracy", color='skyblue')
 
 ax.fill_between(x, ci_lower2, ci_upper2, color='skyblue', alpha=0.3)
 
 ax.set_xlabel('Epochs')
 ax.set_ylabel('Test Accuracy')
-ax.set_title('CondG Net Accuracy VS Normal NN Accuracy At tau of 0.9')
+ax.set_title('CondG Net Accuracy VS Inference NN Accuracy At tau of 0.3')
 ax.legend()
 
-plt.savefig(f'figures/congnet_shaded_0.9.png', dpi=300)
+plt.savefig(f'figures/congnet_shaded_0.3.png', dpi=300)
