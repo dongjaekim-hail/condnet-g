@@ -12,7 +12,8 @@ import wandb
 from datetime import datetime
 
 
-
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
 class Net(nn.Module):
     def __init__(self):
@@ -124,14 +125,32 @@ class model_condnet(nn.Module):
 
         return h, policies, sample_probs, layer_masks
 
-def main(args):
+def main():
     # get args
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+    import argparse
+    args = argparse.ArgumentParser()
+    args.add_argument('--nlayers', type=int, default=3)
+    args.add_argument('--lambda_s', type=float, default=7)
+    args.add_argument('--lambda_v', type=float, default=1.2)
+    args.add_argument('--lambda_l2', type=float, default=5e-4)
+    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--tau', type=float, default=0.3)
+    args.add_argument('--max_epochs', type=int, default=40)
+    args.add_argument('--condnet_min_prob', type=float, default=0.1)
+    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--learning_rate', type=float, default=0.1)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--compact', type=bool, default=False)
+    args.add_argument('--hidden-size', type=int, default=128)
+    args = args.parse_args()
     lambda_s = args.lambda_s
     lambda_v = args.lambda_v
     lambda_l2 = args.lambda_l2
     lambda_pg = args.lambda_pg
     tau = args.tau
-    learning_rate = args.lr
+    learning_rate = args.learning_rate
     max_epochs = args.max_epochs
     BATCH_SIZE = args.BATCH_SIZE
 
@@ -161,6 +180,11 @@ def main(args):
         batch_size=BATCH_SIZE,
         shuffle=False
     )
+
+    wandb.init(project="condgnet",
+                config=args.__dict__,
+                name='cond' + '_tau=' + str(args.tau)
+                )
 
     # create model
     model = model_condnet(args)
@@ -299,34 +323,9 @@ def main(args):
 
             # wandb log test/epoch
             wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn})
-
-if __name__=='__main__':
-    # make arguments and defaults for the parameters
-    import argparse
-    args = argparse.ArgumentParser()
-    args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=20)
-    args.add_argument('--lambda_v', type=float, default=2)
-    args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.2)
-    args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--max_epochs', type=int, default=1000)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.7)
-    args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
-
-    # get time in string to save as file name
-    now = datetime.now()
-    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
-
-    wandb.init(project="condgnet",
-                config=args.parse_args().__dict__
-                )
-
-    wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
-
-    main(args=args.parse_args())
+        torch.save(model.state_dict(), './cond_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
 
     wandb.finish()
+
+if __name__=='__main__':
+    main()
