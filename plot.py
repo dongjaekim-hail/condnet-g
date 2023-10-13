@@ -53,9 +53,9 @@ for index, row in runs_df1.iterrows():
 mean_values1 = runs_df1['history'].apply(lambda x: x['test/epoch_acc']).mean()
 ci_lower1 = mean_values1 - 0.05
 ci_upper1 = mean_values1 + 0.05
-ax.plot(x, mean_values1, label="CondG Net Accuracy", color='red')
+ax.plot(x, mean_values1, label="CondG Net Accuracy", color='limegreen')
 
-ax.fill_between(x, ci_lower1, ci_upper1, color='red', alpha=0.1)
+ax.fill_between(x, ci_lower1, ci_upper1, color='limegreen', alpha=0.3)
 
 for index, row in runs_df2.iterrows():
     x = range(len(row['history']['test/epoch_acc_bf']))
@@ -64,13 +64,13 @@ for index, row in runs_df2.iterrows():
 mean_values2 = runs_df2['history'].apply(lambda x: x['test/epoch_acc_bf']).mean()
 ci_lower2 = mean_values2 - 0.05
 ci_upper2 = mean_values2 + 0.05
-ax.plot(x, mean_values2, label="Normal NN Accuracy", color='blue')
+ax.plot(x, mean_values2, label="Normal NN Accuracy", color='skyblue')
 
-ax.fill_between(x, ci_lower2, ci_upper2, color='blue', alpha=0.1)
+ax.fill_between(x, ci_lower2, ci_upper2, color='skyblue', alpha=0.3)
 
 ax.set_xlabel('Epochs')
 ax.set_ylabel('Test Accuracy')
-ax.set_title('CondG Net Accuracy VS Normal NN Accuracy')
+ax.set_title('CondG Net Accuracy VS Normal NN Accuracy At tau of 0.9')
 ax.legend()
 
 plt.savefig(f'figures/congnet_shaded_0.9.png', dpi=300)
