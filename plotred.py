@@ -53,8 +53,7 @@ for count, target_tau in enumerate([0.3,0.6, 0.9]):
 
     sns.set(style='whitegrid')
 
-    fig, ax = plt.subplots(figsize=(4, 4))
-
+    fig, ax = plt.subplots(figsize=(4.5, 4.5))
     plt.rcParams.update({'font.size': 14})
     # set default font to helvetica
     plt.rcParams['font.family'] = 'Helvetica'
