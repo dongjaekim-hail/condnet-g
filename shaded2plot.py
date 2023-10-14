@@ -35,8 +35,8 @@ for count, tau in enumerate(['0.3', '0.6', '0.9']):
                 'history': run.history(keys=['test/epoch_acc']),
             }
             data_list2.append(data)
-    runs_df2 = pd.DataFrame(data_list2)
     data_list2 = data_list2[-10:]
+    runs_df2 = pd.DataFrame(data_list2)
 
     for index, row in runs_df2.iterrows():
         x = range(1, len(row['history']['test/epoch_acc'])+1)
@@ -67,14 +67,10 @@ for count, tau in enumerate(['0.3', '0.6', '0.9']):
                 'history': run.history(keys=['test/epoch_acc']),
             }
             data_list1.append(data)
-    runs_df2 = pd.DataFrame(data_list2)
-    data_list2 = data_list2[-10:]
-
 
     # pick only last 10 runs
     data_list1 = data_list1[-10:]
     runs_df1 = pd.DataFrame(data_list1)
-
 
     for index, row in runs_df1.iterrows():
         x = range(1, len(row['history']['test/epoch_acc'])+1)
