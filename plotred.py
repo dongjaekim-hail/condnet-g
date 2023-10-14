@@ -15,9 +15,11 @@ api = wandb.Api()
 entity, project = "hails", "condgnet"
 runs = api.runs(entity + "/" + project)
 
-mins_acc = [0.86, 0.9, 0.94]
-maxs_acc = [0.96, 1, 1]
+mins_acc = [0.86, 0.86, 0.94]
+maxs_acc = [0.96, 0.96, 0.96]
 
+mins_acc = [0.9, 0.9, 0.9]
+maxs_acc = [1, 1, 1]
 for count, target_tau in enumerate([0.3,0.6, 0.9]):
 
     data_list = []
@@ -51,7 +53,12 @@ for count, target_tau in enumerate([0.3,0.6, 0.9]):
 
     sns.set(style='whitegrid')
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(4, 4))
+
+    plt.rcParams.update({'font.size': 14})
+    # set default font to helvetica
+    plt.rcParams['font.family'] = 'Helvetica'
+
     axs = sns.heatmap(heatmap_data, cmap=cmap, cbar=True, cbar_kws={'label': 'Accuracy'})
     axs.collections[0].set_clim(mins_acc[count], maxs_acc[count])
     ax.set_xlabel('$\lambda_s$')
