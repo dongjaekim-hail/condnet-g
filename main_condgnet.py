@@ -15,6 +15,7 @@ from datetime import datetime
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
 class Mlp(nn.Module):
     def __init__(self):
@@ -109,15 +110,6 @@ class Condnet_model(nn.Module):
         # self.mlp_surrogate.load_state_dict(self.mlp.state_dict())
 
         self.C = nn.CrossEntropyLoss()
-    #
-    # def forward(self, x):
-    #     # x : input
-    #     # get policy
-    #     u, p = self.gnn(x, adj_)
-    #     # get output
-    #     y, hs = self.mlp(x, cond_drop=self.compact, us=u)
-    #     return y, p, hs, u
-
 
 def adj(model, bidirect = True, last_layer = True, edge2itself = True):
     if last_layer:
@@ -157,8 +149,25 @@ def adj(model, bidirect = True, last_layer = True, edge2itself = True):
         # make sure every element that is non-zero is 1
     adjmatrix[adjmatrix != 0] = 1
     return adjmatrix, trainable_nodes
-def main(args, dt_string):
+def main():
     # get args
+    import argparse
+    args = argparse.ArgumentParser()
+    args.add_argument('--nlayers', type=int, default=3)
+    args.add_argument('--lambda_s', type=float, default=4)
+    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_l2', type=float, default=5e-4)
+    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--tau', type=float, default=0.3)
+    args.add_argument('--max_epochs', type=int, default=40)
+    args.add_argument('--condnet_min_prob', type=float, default=0.1)
+    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--learning_rate', type=float, default=0.1)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--compact', type=bool, default=False)
+    args.add_argument('--hidden-size', type=int, default=128)
+    args = args.parse_args()
+
     lambda_s = args.lambda_s
     lambda_v = args.lambda_v
     lambda_l2 = args.lambda_l2
@@ -174,20 +183,6 @@ def main(args, dt_string):
 
     mlp_model = Mlp().to(device)
     gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, hidden_size=args.hidden_size).to(device)
-
-
-    num_params = 0
-    for param in mlp_model.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
-
-
-    num_params = 0
-    for param in gnn_policy.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
-
-    # model = Condnet_model(args=args.parse_args())
 
     mlp_surrogate = Mlp().to(device)
     # copy weights in mlp to mlp_surrogate
@@ -219,6 +214,10 @@ def main(args, dt_string):
         shuffle=False
     )
 
+    wandb.init(project="condgnet",
+                config=args.__dict__,
+                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                )
 
     C = nn.CrossEntropyLoss()
     mlp_optimizer = optim.SGD(mlp_model.parameters(), lr=learning_rate,
@@ -303,7 +302,7 @@ def main(args, dt_string):
             acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
             pred_1 = torch.argmax(outputs_1.to('cpu'), dim=1)
             accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
-
+            # bf : not learned units is on so acc go down
             # addup loss and acc
             costs += c.to('cpu').item()
             accs += acc
@@ -317,7 +316,7 @@ def main(args, dt_string):
             tau_ = us.mean().detach().item()
             taus += tau_
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc,'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_})
 
             # print PG.item(), and acc with name
             print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf,tau_ ))
@@ -360,8 +359,6 @@ def main(args, dt_string):
                 inputs = inputs.view(-1, num_inputs).to(device)
 
                 # Forward Propagation
-                # ouputs, hs     = self.infer_forward_propagation(inputs, adj_)
-                # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
                 mlp_surrogate.eval()
                 outputs_1, hs = mlp_surrogate(inputs)
                 hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
@@ -408,37 +405,11 @@ def main(args, dt_string):
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
                        'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn})
         # save model
-        torch.save(mlp_model.state_dict(), './mlp_model_'+ dt_string +'.pt')
-        torch.save(gnn_policy.state_dict(), './gnn_policy_'+ dt_string +'.pt')
+        torch.save(mlp_model.state_dict(), './mlp_model_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) +'.pt')
+        torch.save(gnn_policy.state_dict(), './gnn_policy_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) +'.pt')
+
+    wandb.finish()
 
 if __name__=='__main__':
-    # make arguments and defaults for the parameters
-    import argparse
-    args = argparse.ArgumentParser()
-    args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=10)
-    args.add_argument('--lambda_v', type=float, default=1)
-    args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.2)
-    args.add_argument('--max_epochs', type=int, default=1000)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.6)
-    args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
-    args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    main()
 
-    # get time in string to save as file name
-    now = datetime.now()
-    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
-
-    # wandb.init(project="condgnet",
-    #             config=args.parse_args().__dict__
-    #             )
-
-    # wandb.run.name = "condnet_mlp_mnist_{}".format(dt_string)
-
-    main(args=args.parse_args(), dt_string=dt_string)
-
-    # wandb.finish()

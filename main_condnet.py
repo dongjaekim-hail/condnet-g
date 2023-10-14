@@ -11,28 +11,6 @@ import wandb
 
 from datetime import datetime
 
-
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(32*32*3, 1024)
-        self.fc2 = nn.Linear(1024, 1024)
-        self.fc3 = nn.Linear(1024, 10)
-
-    def forward(self, x):
-        # flatten
-        x = x.view(-1, 32*32*3)
-
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        # softmax
-        x = F.softmax(x, dim=1)
-        return x
-
-
 class model_condnet(nn.Module):
     def __init__(self,args):
         super().__init__()
