@@ -24,8 +24,11 @@ plt.rcParams['font.family'] = 'Helvetica'
 # ax.get_legend().remove()
 plt.legend('', frameon=False)
 
+mean_12 = []
+std_12  = []
+
 for count, tau in enumerate(['0.3', '0.6', '0.9']):
-    desired_run_name_pattern2 = "cond_tau="+tau
+    desired_run_name_pattern2 = "cond_lastchance1024_tau="+tau
     data_list2 = []
     for run in runs:
         if desired_run_name_pattern2 in run.name:
@@ -44,6 +47,10 @@ for count, tau in enumerate(['0.3', '0.6', '0.9']):
 
     mean_values2 = runs_df2['history'].apply(lambda x: x['test/epoch_acc']).mean()
     std_values   = runs_df2['history'].apply(lambda x: x['test/epoch_acc']).std()
+
+    mean_12.append(mean_values2.iloc[-1])
+    std_12.append(std_values.iloc[-1])
+
     ci_lower2 = mean_values2 - std_values
     ci_upper2 = mean_values2 + std_values
     plt.plot(x, mean_values2, label=r"$\tau$="+tau, color=bluish_cs[count])
@@ -80,6 +87,9 @@ for count, tau in enumerate(['0.3', '0.6', '0.9']):
     std_values1 = runs_df1['history'].apply(lambda x: x['test/epoch_acc']).std()
     ci_lower1 = mean_values1 - std_values1
     ci_upper1 = mean_values1 + std_values1
+
+    mean_12.append(mean_values1.iloc[-1])
+    std_12.append(std_values1.iloc[-1])
 
     plt.plot(x, mean_values1, label=r"$\tau$="+tau, color=redish_cs[count])
     plt.fill_between(x, ci_lower1, ci_upper1, color=redish_cs[count], alpha=alpha)

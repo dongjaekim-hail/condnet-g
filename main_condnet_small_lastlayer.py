@@ -11,28 +11,6 @@ import wandb
 
 from datetime import datetime
 
-
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(32*32*3, 1024)
-        self.fc2 = nn.Linear(1024, 1024)
-        self.fc3 = nn.Linear(1024, 10)
-
-    def forward(self, x):
-        # flatten
-        x = x.view(-1, 32*32*3)
-
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        # softmax
-        x = F.softmax(x, dim=1)
-        return x
-
-
 class model_condnet(nn.Module):
     def __init__(self,args):
         super().__init__()
@@ -58,26 +36,37 @@ class model_condnet(nn.Module):
         self.mlp.append(nn.Linear(mlp_hidden[i+1], output_dim))
         self.mlp.to(self.device)
 
+        #DOWNSAMPLE
+        self.avg_poolings = nn.ModuleList()
+        pool_hiddens = [512, *mlp_hidden]
+        for i in range(len(self.mlp)):
+            stride = round(pool_hiddens[i] / pool_hiddens[i+1])
+            self.avg_poolings.append(nn.AvgPool1d(kernel_size=stride, stride=stride))
+
+        #UPSAMPLE
+        self.upsample = nn.ModuleList()
+        for i in range(len(self.mlp)):
+            stride = round(pool_hiddens[i+1] / 1024)
+            self.upsample.append(nn.Upsample(scale_factor=stride, mode='nearest'))
+
+
+        # HANDCRAFTED POLICY NET
         n_each_policylayer = 1
         # n_each_policylayer = 1 # if you have only 1 layer perceptron for policy net
         self.policy_net = nn.ModuleList()
         temp = nn.ModuleList()
-        temp.append(nn.Linear(self.input_dim, mlp_hidden[0]))
-        temp.append(nn.Linear(mlp_hidden[0], mlp_hidden[0]))
+        # temp.append(nn.Linear(self.input_dim, mlp_hidden[0])) # BEFORE LARGE MODEL'S
+        temp.append(nn.Linear(self.input_dim, 1024))
         self.policy_net.append(temp)
 
-        for i in range(len(self.mlp)-2):
+        for i in range(len(self.mlp)-1):
             temp = nn.ModuleList()
             for j in range(n_each_policylayer):
-                temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i].out_features))
+                # temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i].out_features)) # BEFORE LARGE MODEL'S
+                temp.append(nn.Linear(self.mlp[i].out_features, 1024))
             self.policy_net.append(temp)
         self.policy_net.to(self.device)
 
-        self.avg_poolings = nn.ModuleList()
-        pool_hiddens = [512, *mlp_hidden]
-        for i in range(len(self.mlp)-1):
-            stride = round(pool_hiddens[i] / pool_hiddens[i+1])
-            self.avg_poolings.append(nn.AvgPool1d(kernel_size=stride, stride=stride))
     def forward(self, x):
         # return policies
         policies = []
@@ -118,8 +107,12 @@ class model_condnet(nn.Module):
 
             # compresss u_i to size of u
 
+            # WHEN YOU DO DOWNSAMPLE
+            # u_i = self.avg_poolings[i](u_i)
 
-            u_i = self.avg_poolings[i](u_i)
+            # WHEN YOU DO UPSAMPLE
+            # u_i = self.upsample[i](u_i.unsqueeze(0)).squeeze(0)
+            u_i = F.interpolate(u_i.unsqueeze(1), size=self.mlp[i].out_features, mode='linear', align_corners=True).squeeze(1)
 
             h_next = F.relu(self.mlp[i](h*u))*u_i
             h = h_next
@@ -129,8 +122,30 @@ class model_condnet(nn.Module):
             sample_probs.append(sampling_prob)
             layer_masks.append(u_i)
 
+        p_i = self.policy_net[-1][0](h)
+
+        p_i = F.sigmoid(p_i)
+        for j in range(1, len(self.policy_net[-1])):
+            p_i = self.policy_net[i][j](p_i)
+            p_i = F.sigmoid(p_i)
+
+        p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
+        u_i = torch.bernoulli(p_i).to(self.device)
+
+        if u_i.sum() == 0:
+            idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
+            u_i[idx] = 1
+
+
+        u_i = F.interpolate(u_i.unsqueeze(1), size=10, mode='linear', align_corners=True).squeeze(1)
+
+
+        h = self.mlp[-1](h*u) * u_i
+
+
+
         # last layer just go without dynamic sampling
-        h = self.mlp[-1](h)
+        # h = self.mlp[-1](h)
         h = F.softmax(h, dim=1)
 
         return h, policies, sample_probs, layer_masks
