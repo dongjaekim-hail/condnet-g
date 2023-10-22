@@ -1,0 +1,42 @@
+{
+    "os": "Windows-10-10.0.19045-SP0",
+    "python": "3.8.17",
+    "heartbeatAt": "2023-08-23T10:13:59.706768",
+    "startedAt": "2023-08-23T10:13:46.054269",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "C:\\Users\\dadol\\OneDrive\\\ubc14\ud0d5 \ud654\uba74\\HAIL\\cong\\condnet-g\\condnet-g\\gnn_policy3.py",
+    "codePath": "gnn_policy3.py",
+    "git": {
+        "remote": "https://github.com/dongjaekim-hail/condnet-g.git",
+        "commit": "e25362de60d978d6d3c6e7d0cf79586e5620163b"
+    },
+    "email": "104367835+DaanChoi@users.noreply.github.com",
+    "root": "C:/Users/dadol/OneDrive/\ubc14\ud0d5 \ud654\uba74/HAIL/cong/condnet-g/condnet-g",
+    "host": "DESKTOP-FENVCLS",
+    "username": "dadol",
+    "executable": "C:\\Users\\dadol\\miniconda3\\envs\\hail\\python.exe",
+    "cpu_count": 2,
+    "cpu_count_logical": 4,
+    "cpu_freq": {
+        "current": 2511.0,
+        "min": 0.0,
+        "max": 2712.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2511.0,
+            "min": 0.0,
+            "max": 2712.0
+        }
+    ],
+    "disk": {
+        "total": 224.21679306030273,
+        "used": 212.20361328125
+    },
+    "memory": {
+        "total": 7.862499237060547
+    }
+}

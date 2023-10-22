@@ -11,28 +11,6 @@ import wandb
 
 from datetime import datetime
 
-
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(32*32*3, 1024)
-        self.fc2 = nn.Linear(1024, 1024)
-        self.fc3 = nn.Linear(1024, 10)
-
-    def forward(self, x):
-        # flatten
-        x = x.view(-1, 32*32*3)
-
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        # softmax
-        x = F.softmax(x, dim=1)
-        return x
-
-
 class model_condnet(nn.Module):
     def __init__(self,args):
         super().__init__()
@@ -42,37 +20,53 @@ class model_condnet(nn.Module):
             self.device = 'cpu'
 
         self.input_dim = 28*28
-        mlp_hidden = 1024
-        output_dim = 10
+        mlp_hidden = [512, 256, 10]
+        output_dim = mlp_hidden[-1]
 
         nlayers = args.nlayers
         self.condnet_min_prob = args.condnet_min_prob
         self.condnet_max_prob = args.condnet_max_prob
 
-
         self.mlp_nlayer = 0
 
         self.mlp = nn.ModuleList()
-        self.mlp.append(nn.Linear(self.input_dim, mlp_hidden))
+        self.mlp.append(nn.Linear(self.input_dim, mlp_hidden[0]))
         for i in range(nlayers):
-            self.mlp.append(nn.Linear(mlp_hidden, mlp_hidden))
-        self.mlp.append(nn.Linear(mlp_hidden, output_dim))
+            self.mlp.append(nn.Linear(mlp_hidden[i], mlp_hidden[i+1]))
+        self.mlp.append(nn.Linear(mlp_hidden[i+1], output_dim))
         self.mlp.to(self.device)
 
+        #DOWNSAMPLE
+        self.avg_poolings = nn.ModuleList()
+        pool_hiddens = [512, *mlp_hidden]
+        for i in range(len(self.mlp)):
+            stride = round(pool_hiddens[i] / pool_hiddens[i+1])
+            self.avg_poolings.append(nn.AvgPool1d(kernel_size=stride, stride=stride))
+
+        #UPSAMPLE
+        self.upsample = nn.ModuleList()
+        for i in range(len(self.mlp)):
+            stride = round(pool_hiddens[i+1] / 1024)
+            self.upsample.append(nn.Upsample(scale_factor=stride, mode='nearest'))
+
+
+        # HANDCRAFTED POLICY NET
         n_each_policylayer = 1
         # n_each_policylayer = 1 # if you have only 1 layer perceptron for policy net
         self.policy_net = nn.ModuleList()
         temp = nn.ModuleList()
-        temp.append(nn.Linear(self.input_dim, mlp_hidden))
-        temp.append(nn.Linear(mlp_hidden, mlp_hidden))
+        # temp.append(nn.Linear(self.input_dim, mlp_hidden[0])) # BEFORE LARGE MODEL'S
+        temp.append(nn.Linear(self.input_dim, 1024))
         self.policy_net.append(temp)
 
-        for i in range(len(self.mlp)-2):
+        for i in range(len(self.mlp)-1):
             temp = nn.ModuleList()
             for j in range(n_each_policylayer):
-                temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i].out_features))
+                # temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i].out_features)) # BEFORE LARGE MODEL'S
+                temp.append(nn.Linear(self.mlp[i].out_features, 1024))
             self.policy_net.append(temp)
         self.policy_net.to(self.device)
+
     def forward(self, x):
         # return policies
         policies = []
@@ -110,6 +104,16 @@ class model_condnet(nn.Module):
             # idx = torch.where(u_i == 0)[0]
 
             # h_next = F.relu(self.mlp[i](h*u.detach()))*u_i
+
+            # compresss u_i to size of u
+
+            # WHEN YOU DO DOWNSAMPLE
+            # u_i = self.avg_poolings[i](u_i)
+
+            # WHEN YOU DO UPSAMPLE
+            # u_i = self.upsample[i](u_i.unsqueeze(0)).squeeze(0)
+            u_i = F.interpolate(u_i.unsqueeze(1), size=self.mlp[i].out_features, mode='linear', align_corners=True).squeeze(1)
+
             h_next = F.relu(self.mlp[i](h*u))*u_i
             h = h_next
             u = u_i
@@ -118,8 +122,30 @@ class model_condnet(nn.Module):
             sample_probs.append(sampling_prob)
             layer_masks.append(u_i)
 
+        p_i = self.policy_net[-1][0](h)
+
+        p_i = F.sigmoid(p_i)
+        for j in range(1, len(self.policy_net[-1])):
+            p_i = self.policy_net[i][j](p_i)
+            p_i = F.sigmoid(p_i)
+
+        p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
+        u_i = torch.bernoulli(p_i).to(self.device)
+
+        if u_i.sum() == 0:
+            idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
+            u_i[idx] = 1
+
+
+        u_i = F.interpolate(u_i.unsqueeze(1), size=10, mode='linear', align_corners=True).squeeze(1)
+
+
+        h = self.mlp[-1](h*u) * u_i
+
+
+
         # last layer just go without dynamic sampling
-        h = self.mlp[-1](h)
+        # h = self.mlp[-1](h)
         h = F.softmax(h, dim=1)
 
         return h, policies, sample_probs, layer_masks
@@ -166,6 +192,20 @@ def main(args):
     model = model_condnet(args)
     # model = model_condnet2()
 
+    num_params = 0
+    for param in model.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
+
+    num_params = 0
+    for param in model.mlp.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
+
+    num_params = 0
+    for param in model.policy_net.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
 
     C = nn.CrossEntropyLoss()
     mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
@@ -234,7 +274,8 @@ def main(args):
             wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, torch.stack(layer_masks).mean().item()))
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, np.mean([tau_.mean().item() for tau_ in layer_masks])
+                                                                                                     ))
 
         # wandb log training/epoch
         wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
@@ -304,7 +345,7 @@ if __name__=='__main__':
     # make arguments and defaults for the parameters
     import argparse
     args = argparse.ArgumentParser()
-    args.add_argument('--nlayers', type=int, default=3)
+    args.add_argument('--nlayers', type=int, default=1)
     args.add_argument('--lambda_s', type=float, default=20)
     args.add_argument('--lambda_v', type=float, default=2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
@@ -315,13 +356,13 @@ if __name__=='__main__':
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.7)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=512)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
 
     # get time in string to save as file name
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
 
-    wandb.init(project="condnet",
+    wandb.init(project="condgnet",
                 config=args.parse_args().__dict__
                 )
 
