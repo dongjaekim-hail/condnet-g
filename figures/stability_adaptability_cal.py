@@ -2,7 +2,7 @@ from glob import glob
 import numpy as np
 import pandas as pd
 
-dir = 'condg-cond-stability/'
+dir = '../csvs/condg-cond-stability/'
 
 for tau in [0.3, 0.6, 0.9]:
 	# empty dataframe for each layer

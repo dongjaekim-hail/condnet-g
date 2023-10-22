@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-dir = 'condg-cond-stability/'
+dir = '../csvs/condg-cond-stability/'
 
 redish_cs = ['#FFC0CB', '#FF6347', '#B22222']
 bluish_cs = ['#D3D3D3', '#A9A9A9', '#4B4B4B']

@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 # make dirs
-os.makedirs('figures/', exist_ok=True)
+os.makedirs('../csvs/figures/', exist_ok=True)
 
 
 api = wandb.Api()
