@@ -188,6 +188,17 @@ def main():
     # copy weights in mlp to mlp_surrogate
     mlp_surrogate.load_state_dict(mlp_model.state_dict())
 
+    num_params = 0
+    for param in mlp_model.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
+
+
+    num_params = 0
+    for param in gnn_policy.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
+    # model = Condnet_model(args=args.parse_args())
     # datasets load mnist data
     train_dataset = datasets.MNIST(
         root="../data/mnist",
