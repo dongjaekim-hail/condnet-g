@@ -3,10 +3,11 @@
 /.idea/.gitignore
 /.idea/aws.xml
 /.idea/condnet-g.iml
-/wandb/debug-cli.dongjaekim.log
+/csvs/wandb/debug-cli.dongjaekim.log
 /.idea/misc.xml
 /.idea/modules.xml
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/inspectionProfiles/Project_Default.xml
-/wandb/settings
+/csvs/wandb/settings
 /.idea/vcs.xml
+/csvs/
