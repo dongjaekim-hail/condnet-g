@@ -12,6 +12,8 @@ import wandb
 
 from datetime import datetime
 
+wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
+
 class ThresholdPruning(prune.BasePruningMethod):
     PRUNING_TYPE = "unstructured"
 
@@ -183,11 +185,11 @@ def main():
             print('Epoch: {}, Batch: {}, Cost: {:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, loss.item(),
                                                                                          acc, np.mean([tau_.mean().item() for tau_ in layer_masks])))
 
-            # wandb log training/epoch
-            wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau})
+        # wandb log training/epoch
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau})
 
-            # print epoch and epochs costs and accs
-            print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
+        # print epoch and epochs costs and accs
+        print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
 
         costs = 0
         accs = 0
@@ -220,19 +222,16 @@ def main():
 
                 loss = C(outputs, labels.to(model.device))
 
-                # wandb log test/epoch
-                wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn,
-                           'test/epoch_tau': taus / bn})
                 # addup loss and acc
                 costs += loss.to('cpu').item()
                 accs += acc
+                taus += np.mean([tau_.mean().item() for tau_ in layer_masks])
 
-                # tau_ = torch.stack(policies).mean().detach().item()
-                # taus += tau_
             #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
-            # wandb log test/epoch
-            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn })
+            # wandb log training/epoch
+            wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn,
+                       'test/epoch_tau': taus / bn})
         torch.save(model.state_dict(), './cond_magnitude_weightMean_based_1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
     wandb.finish()
 if __name__=='__main__':
