@@ -8,7 +8,7 @@ from torch.nn.utils import prune
 
 import torch.nn as nn
 import torch.nn.functional as F
-## import wandb
+import wandb
 
 from datetime import datetime
 
@@ -36,6 +36,7 @@ class model_magnitude(nn.Module):
         nlayers = args.nlayers
 
         self.mlp_nlayer = 0
+        self.tau = args.tau
 
         self.mlp = nn.ModuleList()
         self.mlp.append(nn.Linear(self.input_dim, mlp_hidden[0]))
@@ -48,18 +49,18 @@ class model_magnitude(nn.Module):
         h = x.view(-1, self.input_dim).to(self.device)
         layer_masks = []
         for i in range(len(self.mlp) - 1):
-            weight_mean = torch.mean(self.mlp[i].weight, axis = 1)
+            weight_mean = torch.mean(self.mlp[i].weight.abs(), axis = 1)
             sorted_weight_mean, _ = torch.sort(weight_mean, descending=True)
-            mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * 0.6)]
+            mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
             h = F.relu(self.mlp[i](h))*mask
-            layer_masks.append(mask)
-        weight_mean = torch.mean(self.mlp[-1].weight, axis=1)
+            layer_masks.append(mask.float())
+        weight_mean = torch.mean(self.mlp[-1].weight.abs(), axis=1)
         sorted_weight_mean, _ = torch.sort(weight_mean, descending=True)
-        mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * 0.6)]
+        mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
         h = self.mlp[-1](h)*mask
         # softmax
         h = F.softmax(h, dim=1)
-        layer_masks.append(mask)
+        layer_masks.append(mask.float())
         return h, layer_masks
 
 def main():
@@ -118,10 +119,10 @@ def main():
         shuffle=False
     )
 
-    # wandb.init(project="condgnet",
-    #             config=args.__dict__,
-    #             name='cond_magnitude1024' + '_tau=' + str(args.tau)
-    #             )
+    wandb.init(project="condgnet",
+                config=args.__dict__,
+                name='magnitude_runtime' + '_tau=' + str(args.tau)
+                )
 
     # create model
     model = model_magnitude(args)
@@ -176,17 +177,17 @@ def main():
             accs += acc
 
             # wandb log training/batch
-            ## wandb.log({'train/batch_cost': loss.item(), 'train/batch_acc': acc})
+            wandb.log({'train/batch_cost': loss.item(), 'train/batch_acc': acc, 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, Acc: {:.3f}'.format(epoch, i, loss.item(), acc
-                                                                                                     ))
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, loss.item(),
+                                                                                         acc, np.mean([tau_.mean().item() for tau_ in layer_masks])))
 
-        # wandb log training/epoch
-        ## wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn })
+            # wandb log training/epoch
+            wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau})
 
-        # print epoch and epochs costs and accs
-        print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
+            # print epoch and epochs costs and accs
+            print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
 
         costs = 0
         accs = 0
@@ -219,9 +220,9 @@ def main():
 
                 loss = C(outputs, labels.to(model.device))
 
-                # wandb log test/batch
-                # wandb.log({'test/batch_acc': acc, 'test/batch_cost': loss.to('cpu').item(), 'test/batch_pg': PG.to('cpu').item()})
-
+                # wandb log test/epoch
+                wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn,
+                           'test/epoch_tau': taus / bn})
                 # addup loss and acc
                 costs += loss.to('cpu').item()
                 accs += acc
@@ -231,8 +232,8 @@ def main():
             #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
-            ## wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn })
+            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn })
         torch.save(model.state_dict(), './cond_magnitude_weightMean_based_1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
-    ## wandb.finish()
+    wandb.finish()
 if __name__=='__main__':
     main()
