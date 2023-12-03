@@ -41,7 +41,8 @@ class Mlp(nn.Module):
             if us is None:
                 raise ValueError('u should be given')
             # conditional activation
-            for layer in self.layers:
+            for ll in range(len(self.layers)-1):
+                layer = self.layers[ll]
                 us = us.squeeze()
                 len_out = layer.in_features
                 x = x * us[:,len_in:len_in+len_out] # where it cuts off [TODO]
@@ -51,6 +52,10 @@ class Mlp(nn.Module):
                 # x = nn.Dropout(p=0.3)(x)
                 len_in = len_out
                 hs.append(x)
+            # last layer
+            layer = self.layers[-1]
+            x = layer(x)
+            x = F.relu(x)
 
         # softmax
         x = F.softmax(x, dim=1)
@@ -176,7 +181,7 @@ def main():
     args.add_argument('--learning_rate', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=256)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -240,7 +245,7 @@ def main():
 
     wandb.init(project="condgnet",
                 config=args.__dict__,
-                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='condg_exc_output_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -248,7 +253,7 @@ def main():
                           momentum=0.9, weight_decay=lambda_l2)
     policy_optimizer = optim.SGD(gnn_policy.parameters(), lr=learning_rate,
                             momentum=0.9, weight_decay=lambda_l2)
-    adj_, nodes_ = adj(mlp_model)
+    adj_, nodes_ = adj(mlp_model, last_layer = False)
 
     mlp_model.train()
     # run for 50 epochs
@@ -261,7 +266,7 @@ def main():
         num_iteration = 0
         taus = 0
         Ls = 0
-        us = torch.zeros((1562, 1562))
+        us = torch.zeros((1552, 1552))
 
         gnn_policy.train()
         mlp_model.train()
@@ -288,7 +293,7 @@ def main():
             # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
             mlp_surrogate.eval()
             outputs_1, hs = mlp_surrogate(inputs)
-            hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
+            hs = torch.cat(tuple(hs[i] for i in range(len(hs)-1)),
                            dim=1)  # changing dimension to 1 for putting hs vector in gnn
             hs = hs.detach()
 
@@ -367,7 +372,7 @@ def main():
             num_iteration = 0
             taus = 0
             Ls = 0
-            us = torch.zeros((1562, 1562))
+            us = torch.zeros((1552, 1552))
 
             gnn_policy.train()
             mlp_model.train()
@@ -387,7 +392,7 @@ def main():
                 # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
                 mlp_surrogate.eval()
                 outputs_1, hs = mlp_surrogate(inputs)
-                hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
+                hs = torch.cat(tuple(hs[i] for i in range(len(hs)-1)),
                                dim=1)  # changing dimension to 1 for putting hs vector in gnn
                 hs = hs.detach()
 

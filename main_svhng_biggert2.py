@@ -20,9 +20,10 @@ class Mlp(nn.Module):
     def __init__(self):
         super().__init__()
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(32*32*3, 512))
+        self.layers.append(nn.Linear(32*32*1, 512))
         self.layers.append(nn.Linear(512, 256))
         self.layers.append(nn.Linear(256, 10))
+
 
     def forward(self, x, cond_drop=False, us=None):
         hs = [x]
@@ -61,6 +62,7 @@ class Gnn(nn.Module):
         self.conv1 = DenseSAGEConv(1, hidden_size)
         self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
         self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
+        # self.conv4 = DenseSAGEConv(hidden_size, hidden_size)
         self.fc1 = nn.Linear(hidden_size, 1)
         # self.fc2 = nn.Linear(64,1, bias=False)
         self.minprob = minprob
@@ -76,6 +78,7 @@ class Gnn(nn.Module):
         hs = F.sigmoid(self.conv1(hs_0, batch_adj))
         hs = F.sigmoid(self.conv2(hs, batch_adj))
         hs = F.sigmoid(self.conv3(hs, batch_adj))
+        # hs = F.sigmoid(self.conv4(hs, batch_adj))
         hs_conv = hs
         hs = self.fc1(hs)
         # hs = self.fc2(hs)
@@ -169,13 +172,13 @@ def main():
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=40)
+    args.add_argument('--max_epochs', type=int, default=100)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=100)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=256)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -189,7 +192,7 @@ def main():
     condnet_min_prob = args.condnet_min_prob
     condnet_max_prob = args.condnet_max_prob
     compact = args.compact
-    num_inputs = 32*32*3
+    num_inputs = 32*32*1
 
     mlp_model = Mlp().to(device)
     gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, hidden_size=args.hidden_size).to(device)
@@ -216,7 +219,10 @@ def main():
         root="../data/svhn",
         split='train',  # Use 'train' for the training set
         download=True,
-        transform=transforms.ToTensor()
+        transform=transforms.Compose([
+            transforms.Grayscale(num_output_channels=1),  # Convert images to grayscale
+            transforms.ToTensor()  # Then convert them to tensor
+        ])
     )
 
     # SVHN test dataset
@@ -224,7 +230,10 @@ def main():
         root="../data/svhn",
         split='test',
         download=True,
-        transform=transforms.ToTensor()
+        transform=transforms.Compose([
+            transforms.Grayscale(num_output_channels=1),  # Convert images to grayscale
+            transforms.ToTensor()  # Then convert them to tensor
+        ])
     )
 
     # DataLoader for SVHN train set
@@ -244,7 +253,7 @@ def main():
     wandb.init(project="condgnet",
                entity='hails',
                config=args.__dict__,
-               name='svhn'
+               name='dk_svhn_Gray_biggert'
                )
 
     C = nn.CrossEntropyLoss()
