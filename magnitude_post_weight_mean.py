@@ -47,24 +47,31 @@ class model_magnitude(nn.Module):
         self.mlp.append(nn.Linear(mlp_hidden[i+1], output_dim))
         self.mlp.to(self.device)
 
-    def forward(self, x):
+    def magnitude(self, x):
         h = x.view(-1, self.input_dim).to(self.device)
         layer_masks = []
         for i in range(len(self.mlp) - 1):
-            weight_mean = torch.mean(self.mlp[i].weight.abs(), axis = 1)
+            weight_mean = torch.mean(self.mlp[i].weight.abs(), axis=1)
             sorted_weight_mean, _ = torch.sort(weight_mean, descending=True)
             mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
-            h = F.relu(self.mlp[i](h))*mask
+            h = F.relu(self.mlp[i](h)) * mask
             layer_masks.append(mask.float())
         weight_mean = torch.mean(self.mlp[-1].weight.abs(), axis=1)
         sorted_weight_mean, _ = torch.sort(weight_mean, descending=True)
         mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
-        h = self.mlp[-1](h)*mask
-        # softmax
+        h = self.mlp[-1](h) * mask
+        ## softmax
         h = F.softmax(h, dim=1)
         layer_masks.append(mask.float())
         return h, layer_masks
 
+    def forward(self, x):
+        h = x.view(-1, self.input_dim).to(self.device)
+        for i in range(len(self.mlp) - 1):
+            h = F.relu(self.mlp[i](h))
+        h = self.mlp[-1](h)
+        h = F.softmax(h, dim=1)
+        return h
 def main():
     # get args
     now = datetime.now()
@@ -123,12 +130,11 @@ def main():
 
     wandb.init(project="condgnet",
                 config=args.__dict__,
-                name='magnitude_runtime_comparison' + '_tau=' + str(args.tau)
+                name='magnitude_post_comparison' + '_tau=' + str(args.tau)
                 )
 
     # create model
     model = model_magnitude(args)
-    # model = model_condnet2()
 
     num_params = 0
     for param in model.parameters():
@@ -160,7 +166,7 @@ def main():
             # get batch
             inputs, labels = data
 
-            outputs, layer_masks = model(inputs)
+            outputs = model(inputs)
 
             # make labels one hot vector
             y_one_hot = torch.zeros(labels.shape[0], 10)
@@ -170,12 +176,16 @@ def main():
             loss.backward()
             mlp_optimizer.step()
 
+            # magnitude
+            pruned_outputs, layer_masks = model.magnitude(inputs)
+
             # calculate accuracy
-            pred = torch.argmax(outputs.to('cpu'), dim=1)
+            pred = torch.argmax(pruned_outputs.to('cpu'), dim=1)
             acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+            pruned_loss = C(pruned_outputs, labels.to(model.device))
 
             # addup loss and acc
-            costs += loss.to('cpu').item()
+            costs += pruned_loss.to('cpu').item()
             accs += acc
 
             # wandb log training/batch
@@ -210,17 +220,20 @@ def main():
                 y_batch_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1,).tolist()] = 1
 
                 # get output
-                outputs, layer_masks = model(torch.tensor(inputs))
+                # outputs = model(torch.tensor(inputs))
+
+                # magnitude
+                pruned_outputs, layer_masks = model.magnitude(inputs)
 
                 # calculate accuracy
-                pred = torch.argmax(outputs, dim=1).to('cpu')
+                pred = torch.argmax(pruned_outputs, dim=1).to('cpu')
                 acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
 
                 # make labels one hot vector
                 y_one_hot = torch.zeros(labels.shape[0], 10)
                 y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
 
-                loss = C(outputs, labels.to(model.device))
+                loss = C(pruned_outputs, labels.to(model.device))
 
                 # addup loss and acc
                 costs += loss.to('cpu').item()
@@ -232,7 +245,7 @@ def main():
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn,
                        'test/epoch_tau': taus / bn})
-        torch.save(model.state_dict(), './cond_magnitude_weightMean_based_1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(model.state_dict(), './post_magnitude_weightMean_based_1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
     wandb.finish()
 if __name__=='__main__':
     main()

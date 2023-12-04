@@ -232,7 +232,7 @@ def main():
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn,
                        'test/epoch_tau': taus / bn})
-        torch.save(model.state_dict(), './cond_magnitude_weightMean_based_1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(model.state_dict(), './runtime_magnitude_weightMean_based_1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
     wandb.finish()
 if __name__=='__main__':
     main()
