@@ -53,12 +53,12 @@ class model_magnitude(nn.Module):
         for i in range(len(self.mlp) - 1):
             weight_mean = torch.mean(self.mlp[i].weight.abs(), axis=1)
             sorted_weight_mean, _ = torch.sort(weight_mean, descending=True)
-            mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
+            mask = weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
             h = F.relu(self.mlp[i](h)) * mask
             layer_masks.append(mask.float())
         weight_mean = torch.mean(self.mlp[-1].weight.abs(), axis=1)
         sorted_weight_mean, _ = torch.sort(weight_mean, descending=True)
-        mask = sorted_weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
+        mask = weight_mean >= sorted_weight_mean[round(len(sorted_weight_mean) * self.tau)]
         h = self.mlp[-1](h) * mask
         ## softmax
         h = F.softmax(h, dim=1)
@@ -130,7 +130,7 @@ def main():
 
     wandb.init(project="condgnet",
                 config=args.__dict__,
-                name='magnitude_post_comparison' + '_tau=' + str(args.tau)
+                name='magnitude_post_comparison_125' + '_tau=' + str(args.tau)
                 )
 
     # create model
