@@ -34,12 +34,17 @@ class ResNet50(torch.nn.Module):
         self.fc = self.modules[9]
 
     def forward(self, x, cond_drop=False, us=None, channels=None):
-        hs = []
+        hs = [torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device)]
         if not cond_drop:
-            for layer in [self.conv1, self.bn1, self.relu, self.max_pool]:
-                x = layer(x)
-                if 'ReLU' in str(layer):
-                    hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
+            x = self.conv1(x)
+            x = self.bn1(x)
+            x = self.relu(x)
+            hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
+            x = self.max_pool(x)
+            # for layer in [self.conv1, self.bn1, self.relu, self.max_pool]:
+            #     x = layer(x)
+            #     if 'ReLU' in str(layer):
+            #         hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
             for layer in [self.layer1, self.layer2, self.layer3, self.layer4]:
                 for bottleneck in layer:
                     residual = x
@@ -66,38 +71,71 @@ class ResNet50(torch.nn.Module):
             if us is None:
                 raise ValueError('u should be given')
             us = us.unsqueeze(-1)
-            i = 0
-            for layer in [self.conv1, self.bn1, self.relu, self.max_pool]:
-                x = layer(x)
-                if 'Conv' in str():
-                    x = x * us[:, channels[0]: channels[0] + channels[1]]
-                elif 'ReLU' in str(layer):
-                    hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
+            x = self.conv1(x)
+            x = self.bn1(x)
+            x = self.relu(x)
+            us_ = us[:, channels[0]:channels[0] + channels[1]]
+            x = x * us_
+            hs.append(x)
+            x = self.max_pool(x)
+            # for layer in [self.conv1, self.bn1, self.relu, self.max_pool]:
+                # x = layer(x)
+                # if 'Conv' in str():
+                #     x = x * us[:, channels[0]: channels[0] + channels[1]]
+                # elif 'ReLU' in str(layer):
+                #     hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
 
+            i = 0
             for layer in [self.layer1, self.layer2, self.layer3, self.layer4]:
                 for bottleneck in layer:
+                    # i = 0
+                    # l_idx = []
+                    # i_idx = []
+                    # for l in bottleneck.children():
+                    #     l_idx.append(l)
+                    #     i_idx.append(i)
+                    #     print(channels[i + 2])
+                    #     i+=1
+
+
                     residual = x
                     out = bottleneck.conv1(x)
                     out = bottleneck.bn1(out)
-                    out = bottleneck.relu(out)
-                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
+                    out = bottleneck.relu(out) # 64
+
+                    us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    out = out * us_
+                    i += 1
+
+                    hs.append(out)
                     out = bottleneck.conv2(out)
                     out = bottleneck.bn2(out)
-                    out = bottleneck.relu(out)
-                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
+                    out = bottleneck.relu(out) # 64
+
+                    us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    out = out * us_
+                    i += 1
+
+                    hs.append(out)
                     out = bottleneck.conv3(out)
                     out = bottleneck.bn3(out)
                     if bottleneck.downsample is not None:
                         residual = bottleneck.downsample(x)
                     out += residual
-                    out = bottleneck.relu(out)
-                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
+                    out = bottleneck.relu(out) # 256
+
+                    us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    out = out * us_
+                    i += 1
+
+                    hs.append(out)
                     x = out
 
-                    for l in bottleneck.children():
-                        if 'Conv' in str(l):
-                            x = x * us[:, channels[i]:channels[i] + channels[i + 1]]
-                            i += 1
+                    # i = 0
+                    # for l in bottleneck.children():
+                    #     if 'Conv' in str(l):
+                    #         out = out * us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    #         i += 1
 
             x = self.avg_pool(x)
             x = x.view(x.size(0), -1)
@@ -106,18 +144,7 @@ class ResNet50(torch.nn.Module):
         return x, hs
 
 def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
-    # if last_layer:
-    #     num_nodes = sum([layer.in_features for layer in model.layers]) + model.layers[-1].out_features
-    #     nl = len(model.layers)
-    #     trainable_nodes = np.concatenate(
-    #         (np.ones(sum([layer.in_features for layer in model.layers])), np.zeros(model.layers[-1].out_features)),
-    #         axis=0)
-    #     # trainable_nodes => [1,1,1,......,1,0,0,0] => input layer & hidden layer 의 노드 개수 = 1의 개수, output layer 의 노드 개수 = 0의 개수
-    # else:
-    #     num_nodes = sum([layer.in_features for layer in model.layers])
-    #     nl = len(model.layers) - 1
-    #     trainable_nodes = np.ones(num_nodes)
-    resnet_model = models.resnet50(pretrained=True)
+    # resnet_model = models.resnet50(pretrained=True)
     if last_layer:
         num_channels_ls = []
         for i in range(len(list(resnet_model.children())[0:4])):
@@ -128,11 +155,23 @@ def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
         for layer in list(resnet_model.children())[4:8]:
             for bottleneck in layer:
                 try:
-                    for l in bottleneck.children():
-                        if 'Conv' in str(l):
-                            num_channels_ls.append(l.in_channels)
+                    num_channels_ls.append(bottleneck.conv1.in_channels)
+                    num_channels_ls.append(bottleneck.conv2.in_channels)
+                    num_channels_ls.append(bottleneck.conv3.in_channels)
                 except Exception:
                     continue
+                    # for l in bottleneck.children():
+                    #     if isinstance(l, torch.nn.modules.conv.Conv2d):
+                    #         num_channels_ls.append(l.in_channels)
+                    #     elif isinstance(l, torch.nn.Sequential):
+                    #         for sub_layer in l.children():
+                    #             if isinstance(sub_layer, torch.nn.modules.conv.Conv2d):
+                    #                 num_channels_ls.append(sub_layer.in_channels)
+                #     for l in bottleneck.children():
+                #         if 'Conv' in str(l):
+                #             num_channels_ls.append(l.in_channels)
+                # except Exception:
+                #     continue
         num_channels_ls.append(list(resnet_model.children())[7][2].conv3.out_channels)
         num_channels = sum(num_channels_ls)
         num_conv_layers = len(num_channels_ls)
@@ -147,6 +186,13 @@ def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
         for layer in list(resnet_model.children())[4:8]:
             for bottleneck in layer:
                 try:
+                    # for l in bottleneck.children():
+                    #     if isinstance(l, torch.nn.modules.conv.Conv2d):
+                    #         num_channels_ls.append(l.in_channels)
+                    #     elif isinstance(l, torch.nn.Sequential):
+                    #         for sub_layer in l.children():
+                    #             if isinstance(sub_layer, torch.nn.modules.conv.Conv2d):
+                    #                 num_channels_ls.append(sub_layer.in_channels)
                     for l in bottleneck.children():
                         if 'Conv' in str(l):
                             num_channels_ls.append(l.in_channels)
@@ -185,7 +231,7 @@ def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
 class Gnn(nn.Module):
     def __init__(self, minprob, maxprob, hidden_size = 64):
         super().__init__()
-        self.conv1 = DenseSAGEConv(14*14, hidden_size)
+        self.conv1 = DenseSAGEConv(7*7, hidden_size)
         self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
         self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
         self.fc1 = nn.Linear(hidden_size, 1)
