@@ -11,10 +11,14 @@ import numpy as np
 import torch.nn.functional as F
 from datetime import datetime
 import wandb
+# import os
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 
 # wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
 # wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# device = 'cpu'
 
 class ResNet50(torch.nn.Module):
     def __init__(self):
@@ -45,6 +49,7 @@ class ResNet50(torch.nn.Module):
             #     x = layer(x)
             #     if 'ReLU' in str(layer):
             #         hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
+            count=0
             for layer in [self.layer1, self.layer2, self.layer3, self.layer4]:
                 for bottleneck in layer:
                     residual = x
@@ -64,6 +69,7 @@ class ResNet50(torch.nn.Module):
                     out = bottleneck.relu(out)
                     hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
                     x = out
+                count+=1
             x = self.avg_pool(x)
             x = x.view(x.size(0), -1)
             x = self.fc(x)
@@ -186,16 +192,9 @@ def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
         for layer in list(resnet_model.children())[4:8]:
             for bottleneck in layer:
                 try:
-                    # for l in bottleneck.children():
-                    #     if isinstance(l, torch.nn.modules.conv.Conv2d):
-                    #         num_channels_ls.append(l.in_channels)
-                    #     elif isinstance(l, torch.nn.Sequential):
-                    #         for sub_layer in l.children():
-                    #             if isinstance(sub_layer, torch.nn.modules.conv.Conv2d):
-                    #                 num_channels_ls.append(sub_layer.in_channels)
-                    for l in bottleneck.children():
-                        if 'Conv' in str(l):
-                            num_channels_ls.append(l.in_channels)
+                    num_channels_ls.append(bottleneck.conv1.in_channels)
+                    num_channels_ls.append(bottleneck.conv2.in_channels)
+                    num_channels_ls.append(bottleneck.conv3.in_channels)
                 except Exception:
                     continue
         num_channels = sum(num_channels_ls)
@@ -275,12 +274,15 @@ def main():
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=50)
+    # args.add_argument('--condnet_min_prob', type=float, default=0.01)
+    # args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
-    args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=1)
+    args.add_argument('--learning_rate', type=float, default=0.001)
+    args.add_argument('--BATCH_SIZE', type=int, default=8)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
+    args.add_argument('--accum-step', type=int, default=8)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -359,14 +361,22 @@ def main():
         gnn_policy.train()
         resnet_model.train()
 
+        resnet_optimizer.zero_grad()
+        policy_optimizer.zero_grad()
+
+        L_accum = []
+        c_accum = []
+        PG_accum = []
+        acc_accum = []
+        accbf_accum = []
+        tau_accum = []
+
+
         for i, data in enumerate(train_loader, start=0):
 
             if args.compact:
                 if i > 50:
                     break
-
-            resnet_optimizer.zero_grad()
-            policy_optimizer.zero_grad()
 
             bn += 1
 
@@ -383,8 +393,9 @@ def main():
             # make labels one hot vector
             y_one_hot = torch.zeros(labels.shape[0], 1000)
             y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
-
-            c = criterion(outputs, labels.to(device))
+            # y_one_hot = torch.zeros((2, 1000), device=device)
+            # y_one_hot[torch.arange(labels.shape[0], device=device), labels] = 1
+            c = criterion( F.softmax(outputs, dim=1), labels.to(device))
             # Compute the regularization loss L
 
             L = c + lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean() +
@@ -397,10 +408,6 @@ def main():
             logp = torch.log(p.squeeze()).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
 
-            PG.backward()
-            resnet_optimizer.step()
-            policy_optimizer.step()
-
             # calculate accuracy
             pred = torch.argmax(outputs, dim=1)
             pred = pred.to(device)
@@ -408,27 +415,55 @@ def main():
             pred_1 = torch.argmax(outputs_surrogate, dim=1)
             accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
 
-            # addup loss and acc
-            costs += c.to('cpu').item()
-            accs += acc
-            accsbf += accbf
-            PGs += PG.to('cpu').item()
-            Ls += L.to('cpu').item()
-
-            # surrogate
-            resnet_surrogate.load_state_dict(resnet_model.state_dict())
-
             tau_ = us.mean().detach().item()
-            taus += tau_
+            L_accum.append(L.item())
+            c_accum.append(c.item())
+            PG_accum.append(PG.item())
+            acc_accum.append(acc)
+            accbf_accum.append(accbf)
+            tau_accum.append(tau_)
 
-            # print PG.item(), and acc with name
-            print(
-                'Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(epoch, i,
-                                                                                                               c.item(),
-                                                                                                               PG.item(),
-                                                                                                               acc,
-                                                                                                               accbf,
-                                                                                                               tau_))
+            PG /= args.accum_step
+            PG.backward()
+
+            if (i+1) % args.accum_step ==0 or ((i+1)==len(train_loader)):
+                resnet_optimizer.step()
+                policy_optimizer.step()
+
+                # addup loss and acc
+                costs += np.sum(c_accum)
+                accs += np.mean(acc_accum)
+                accsbf += np.mean(accbf_accum)
+                PGs += np.sum(PG_accum)
+                Ls += np.sum(L_accum)
+
+                # surrogate
+                resnet_surrogate.load_state_dict(resnet_model.state_dict())
+
+                taus += np.mean(tau_accum)
+
+                # print PG.item(), and acc with name
+                # print(
+                    # 'Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(epoch, i,
+                    #                                                                                                c.item(),
+                    #                                                                                                PG.item(),
+                    #                                                                                                acc,
+                    #                                                                                                accbf,
+                    #                                                                                                tau_))
+                print(
+                    'Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(epoch, i, np.sum(c_accum)/args.accum_step, np.sum(PG_accum)/args.accum_step, np.mean(acc_accum), np.mean(accbf_accum), np.mean(tau_accum)))
+
+
+                resnet_optimizer.zero_grad()
+                policy_optimizer.zero_grad()
+
+                L_accum = []
+                c_accum = []
+                PG_accum = []
+                acc_accum = []
+                accbf_accum = []
+                tau_accum = []
+
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
