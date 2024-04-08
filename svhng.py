@@ -13,7 +13,6 @@ import wandb
 
 from datetime import datetime
 
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
@@ -21,7 +20,7 @@ class Mlp(nn.Module):
     def __init__(self):
         super().__init__()
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(28*28, 512))
+        self.layers.append(nn.Linear(32*32*3, 512))
         self.layers.append(nn.Linear(512, 256))
         self.layers.append(nn.Linear(256, 10))
 
@@ -165,11 +164,11 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=4)
-    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_s', type=float, default=7)
+    args.add_argument('--lambda_v', type=float, default=1.2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.3)
+    args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=40)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
@@ -190,37 +189,52 @@ def main():
     condnet_min_prob = args.condnet_min_prob
     condnet_max_prob = args.condnet_max_prob
     compact = args.compact
-    num_inputs = 28**2
+    num_inputs = 32*32*3
 
     mlp_model = Mlp().to(device)
     gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, hidden_size=args.hidden_size).to(device)
 
     # model = Condnet_model(args=args.parse_args())
 
+    num_params = 0
+    for param in gnn_policy.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
+
+    num_params = 0
+    for param in mlp_model.parameters():
+        num_params += param.numel()
+    print('Number of parameters: {}'.format(num_params))
+
+
     mlp_surrogate = Mlp().to(device)
     # copy weights in mlp to mlp_surrogate
     mlp_surrogate.load_state_dict(mlp_model.state_dict())
 
-    # datasets load mnist data
-    train_dataset = datasets.MNIST(
-        root="../data/mnist",
-        train=True,
+    # SVHN train dataset
+    train_dataset = datasets.SVHN(
+        root="../data/svhn",
+        split='train',  # Use 'train' for the training set
         download=True,
         transform=transforms.ToTensor()
     )
 
-    test_dataset = datasets.MNIST(
-        root="../data/mnist",
-        train=False,
+    # SVHN test dataset
+    test_dataset = datasets.SVHN(
+        root="../data/svhn",
+        split='test',
         download=True,
         transform=transforms.ToTensor()
     )
 
+    # DataLoader for SVHN train set
     train_loader = torch.utils.data.DataLoader(
         dataset=train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True
     )
+
+    # DataLoader for SVHN test set
     test_loader = torch.utils.data.DataLoader(
         dataset=test_dataset,
         batch_size=BATCH_SIZE,
@@ -228,15 +242,14 @@ def main():
     )
 
     wandb.init(project="condgnet",
-                config=args.__dict__,
-                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
-                )
+               entity='hails',
+               config=args.__dict__,
+               name='svhn'
+               )
 
     C = nn.CrossEntropyLoss()
-    mlp_optimizer = optim.SGD(mlp_model.parameters(), lr=learning_rate,
-                          momentum=0.9, weight_decay=lambda_l2)
-    policy_optimizer = optim.SGD(gnn_policy.parameters(), lr=learning_rate,
-                            momentum=0.9, weight_decay=lambda_l2)
+    mlp_optimizer = optim.SGD(mlp_model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=lambda_l2)
+    policy_optimizer = optim.SGD(gnn_policy.parameters(), lr=learning_rate, momentum=0.9, weight_decay=lambda_l2)
     adj_, nodes_ = adj(mlp_model)
 
     mlp_model.train()
@@ -420,11 +433,11 @@ def main():
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
                        'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn})
         # save model
-        torch.save(mlp_model.state_dict(), './mlp_model_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
-        torch.save(gnn_policy.state_dict(), './gnn_policy_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(mlp_model.state_dict(), './svhnmlp_model_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(gnn_policy.state_dict(), './svhngnn_policy_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
 
     wandb.finish()
 
+
 if __name__=='__main__':
     main()
-
