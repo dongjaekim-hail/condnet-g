@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "C:\Program Files\JetBrains\PyCharm Community Edition 2022.2.4\plugins\python-ce\helpers\pydev\pydevd.py", line 1496, in _exec
+    pydev_imports.execfile(file, globals, locals)  # execute the script
+  File "C:\Program Files\JetBrains\PyCharm Community Edition 2022.2.4\plugins\python-ce\helpers\pydev\_pydev_imps\_pydev_execfile.py", line 18, in execfile
+    exec(compile(contents+"\n", file, 'exec'), glob, loc)
+  File "C:\Users\dongjae\Desktop\condnet-g\main_svhng_biggert2.py", line 452, in <module>
+    main()
+  File "C:\Users\dongjae\Desktop\condnet-g\main_svhng_biggert2.py", line 295, in main
+    inputs = inputs.view(-1, num_inputs).to(device)
+RuntimeError: shape '[-1, 3072]' is invalid for input of size 102400
+0 1024
+1024 1536
+1024 1536
+1536 1792
+1536 1792
+1792 1802

@@ -1,0 +1,260 @@
+0 784
+784 1296
+784 1296
+1296 1552
+Epoch: 0, Batch: 0, Cost: 2.3028714657, PG:4.61640, Acc: 0.059, Acc: 0.055, Tau: 0.532
+C:\Users\dongjae\Desktop\condnet-g\main_condg_exc_output.py:331: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+C:\Users\dongjae\Desktop\condnet-g\main_condg_exc_output.py:333: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+Epoch: 0, Batch: 1, Cost: 2.3025791645, PG:3.92981, Acc: 0.117, Acc: 0.098, Tau: 0.898
+Epoch: 0, Batch: 2, Cost: 2.3025770187, PG:3.93904, Acc: 0.082, Acc: 0.082, Tau: 0.899
+Epoch: 0, Batch: 3, Cost: 2.3023631573, PG:3.93884, Acc: 0.102, Acc: 0.090, Tau: 0.899
+Epoch: 0, Batch: 4, Cost: 2.3026690483, PG:3.93920, Acc: 0.086, Acc: 0.070, Tau: 0.899
+Epoch: 0, Batch: 5, Cost: 2.3021442890, PG:3.93859, Acc: 0.133, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 6, Cost: 2.3023741245, PG:3.93886, Acc: 0.141, Acc: 0.098, Tau: 0.899
+Epoch: 0, Batch: 7, Cost: 2.3024561405, PG:3.93895, Acc: 0.105, Acc: 0.074, Tau: 0.900
+Epoch: 0, Batch: 8, Cost: 2.3023962975, PG:3.93888, Acc: 0.129, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 9, Cost: 2.3019456863, PG:3.93836, Acc: 0.172, Acc: 0.074, Tau: 0.900
+Epoch: 0, Batch: 10, Cost: 2.3017313480, PG:3.93811, Acc: 0.152, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 11, Cost: 2.3018357754, PG:3.93823, Acc: 0.184, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 12, Cost: 2.3020884991, PG:3.93852, Acc: 0.172, Acc: 0.082, Tau: 0.900
+Epoch: 0, Batch: 13, Cost: 2.3021366596, PG:3.93858, Acc: 0.172, Acc: 0.090, Tau: 0.899
+Epoch: 0, Batch: 14, Cost: 2.3017060757, PG:3.93808, Acc: 0.223, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 15, Cost: 2.3010625839, PG:3.93733, Acc: 0.270, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 16, Cost: 2.3012199402, PG:3.93751, Acc: 0.273, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 17, Cost: 2.3008372784, PG:3.93707, Acc: 0.301, Acc: 0.102, Tau: 0.900
+Epoch: 0, Batch: 18, Cost: 2.3004217148, PG:3.93658, Acc: 0.355, Acc: 0.102, Tau: 0.900
+Epoch: 0, Batch: 19, Cost: 2.3006253242, PG:3.93682, Acc: 0.320, Acc: 0.094, Tau: 0.900
+Epoch: 0, Batch: 20, Cost: 2.3003046513, PG:3.93645, Acc: 0.332, Acc: 0.109, Tau: 0.900
+Epoch: 0, Batch: 21, Cost: 2.2999722958, PG:3.93606, Acc: 0.375, Acc: 0.078, Tau: 0.900
+Epoch: 0, Batch: 22, Cost: 2.2996339798, PG:3.93567, Acc: 0.379, Acc: 0.086, Tau: 0.901
+Epoch: 0, Batch: 23, Cost: 2.2998778820, PG:3.93595, Acc: 0.340, Acc: 0.082, Tau: 0.900
+Epoch: 0, Batch: 24, Cost: 2.3002648354, PG:3.93640, Acc: 0.289, Acc: 0.109, Tau: 0.900
+Epoch: 0, Batch: 25, Cost: 2.2996263504, PG:3.93566, Acc: 0.328, Acc: 0.078, Tau: 0.899
+Epoch: 0, Batch: 26, Cost: 2.2992975712, PG:3.93528, Acc: 0.293, Acc: 0.129, Tau: 0.900
+Epoch: 0, Batch: 27, Cost: 2.2990331650, PG:3.93497, Acc: 0.320, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 28, Cost: 2.2991049290, PG:3.93505, Acc: 0.293, Acc: 0.113, Tau: 0.899
+Epoch: 0, Batch: 29, Cost: 2.2990610600, PG:3.93500, Acc: 0.289, Acc: 0.125, Tau: 0.900
+Epoch: 0, Batch: 30, Cost: 2.2980427742, PG:3.93382, Acc: 0.297, Acc: 0.102, Tau: 0.899
+Epoch: 0, Batch: 31, Cost: 2.2980611324, PG:3.93384, Acc: 0.289, Acc: 0.125, Tau: 0.900
+Epoch: 0, Batch: 32, Cost: 2.2976229191, PG:3.93333, Acc: 0.316, Acc: 0.090, Tau: 0.900
+Epoch: 0, Batch: 33, Cost: 2.2976286411, PG:3.93333, Acc: 0.289, Acc: 0.102, Tau: 0.901
+Epoch: 0, Batch: 34, Cost: 2.2968487740, PG:3.93243, Acc: 0.312, Acc: 0.074, Tau: 0.899
+Epoch: 0, Batch: 35, Cost: 2.2961463928, PG:3.93161, Acc: 0.340, Acc: 0.086, Tau: 0.901
+Epoch: 0, Batch: 36, Cost: 2.2961170673, PG:3.93158, Acc: 0.293, Acc: 0.121, Tau: 0.901
+Epoch: 0, Batch: 37, Cost: 2.2950482368, PG:3.93033, Acc: 0.312, Acc: 0.148, Tau: 0.900
+Epoch: 0, Batch: 38, Cost: 2.2943620682, PG:3.92953, Acc: 0.363, Acc: 0.227, Tau: 0.901
+Epoch: 0, Batch: 39, Cost: 2.2953314781, PG:3.93066, Acc: 0.293, Acc: 0.281, Tau: 0.900
+Epoch: 0, Batch: 40, Cost: 2.2933528423, PG:3.92836, Acc: 0.328, Acc: 0.188, Tau: 0.900
+Epoch: 0, Batch: 41, Cost: 2.2929449081, PG:3.92789, Acc: 0.367, Acc: 0.145, Tau: 0.899
+Epoch: 0, Batch: 42, Cost: 2.2919199467, PG:3.92669, Acc: 0.348, Acc: 0.156, Tau: 0.899
+Epoch: 0, Batch: 43, Cost: 2.2921965122, PG:3.92701, Acc: 0.301, Acc: 0.121, Tau: 0.901
+Epoch: 0, Batch: 44, Cost: 2.2929201126, PG:3.92786, Acc: 0.277, Acc: 0.141, Tau: 0.900
+Epoch: 0, Batch: 45, Cost: 2.2917106152, PG:3.92645, Acc: 0.309, Acc: 0.156, Tau: 0.900
+Epoch: 0, Batch: 46, Cost: 2.2899854183, PG:3.92444, Acc: 0.340, Acc: 0.172, Tau: 0.899
+Epoch: 0, Batch: 47, Cost: 2.2866122723, PG:3.92052, Acc: 0.371, Acc: 0.207, Tau: 0.901
+Epoch: 0, Batch: 48, Cost: 2.2875099182, PG:3.92156, Acc: 0.316, Acc: 0.195, Tau: 0.900
+Epoch: 0, Batch: 49, Cost: 2.2855620384, PG:3.91929, Acc: 0.285, Acc: 0.188, Tau: 0.900
+Epoch: 0, Batch: 50, Cost: 2.2848806381, PG:3.91850, Acc: 0.270, Acc: 0.223, Tau: 0.900
+Epoch: 0, Batch: 51, Cost: 2.2842695713, PG:3.91779, Acc: 0.305, Acc: 0.273, Tau: 0.900
+Epoch: 0, Batch: 52, Cost: 2.2832942009, PG:3.91666, Acc: 0.230, Acc: 0.199, Tau: 0.899
+Epoch: 0, Batch: 53, Cost: 2.2801496983, PG:3.91300, Acc: 0.297, Acc: 0.227, Tau: 0.900
+Epoch: 0, Batch: 54, Cost: 2.2789230347, PG:3.91157, Acc: 0.266, Acc: 0.160, Tau: 0.899
+Epoch: 0, Batch: 55, Cost: 2.2739665508, PG:3.90580, Acc: 0.266, Acc: 0.117, Tau: 0.900
+Epoch: 0, Batch: 56, Cost: 2.2725841999, PG:3.90419, Acc: 0.246, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 57, Cost: 2.2737858295, PG:3.90559, Acc: 0.211, Acc: 0.082, Tau: 0.900
+Epoch: 0, Batch: 58, Cost: 2.2664232254, PG:3.89703, Acc: 0.227, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 59, Cost: 2.2586729527, PG:3.88801, Acc: 0.188, Acc: 0.121, Tau: 0.900
+Epoch: 0, Batch: 60, Cost: 2.2472679615, PG:3.87474, Acc: 0.238, Acc: 0.125, Tau: 0.901
+Epoch: 0, Batch: 61, Cost: 2.2483978271, PG:3.87605, Acc: 0.207, Acc: 0.090, Tau: 0.900
+Epoch: 0, Batch: 62, Cost: 2.2469100952, PG:3.87432, Acc: 0.234, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 63, Cost: 2.2357311249, PG:3.86132, Acc: 0.234, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 64, Cost: 2.2515823841, PG:3.87976, Acc: 0.188, Acc: 0.078, Tau: 0.900
+Epoch: 0, Batch: 65, Cost: 2.2370529175, PG:3.86285, Acc: 0.176, Acc: 0.090, Tau: 0.902
+Epoch: 0, Batch: 66, Cost: 2.2207696438, PG:3.84391, Acc: 0.234, Acc: 0.102, Tau: 0.900
+Epoch: 0, Batch: 67, Cost: 2.1888589859, PG:3.80678, Acc: 0.266, Acc: 0.121, Tau: 0.900
+Epoch: 0, Batch: 68, Cost: 2.1843266487, PG:3.80151, Acc: 0.285, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 69, Cost: 2.1970191002, PG:3.81627, Acc: 0.234, Acc: 0.223, Tau: 0.900
+Epoch: 0, Batch: 70, Cost: 2.2064933777, PG:3.82730, Acc: 0.203, Acc: 0.184, Tau: 0.900
+Epoch: 0, Batch: 71, Cost: 2.2036621571, PG:3.82400, Acc: 0.184, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 72, Cost: 2.2080013752, PG:3.82905, Acc: 0.199, Acc: 0.098, Tau: 0.899
+Epoch: 0, Batch: 73, Cost: 2.1940729618, PG:3.81285, Acc: 0.215, Acc: 0.141, Tau: 0.900
+Epoch: 0, Batch: 74, Cost: 2.1751930714, PG:3.79088, Acc: 0.230, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 75, Cost: 2.1569306850, PG:3.76963, Acc: 0.270, Acc: 0.152, Tau: 0.899
+Epoch: 0, Batch: 76, Cost: 2.1219086647, PG:3.72888, Acc: 0.332, Acc: 0.133, Tau: 0.899
+Epoch: 0, Batch: 77, Cost: 2.1086435318, PG:3.71345, Acc: 0.352, Acc: 0.137, Tau: 0.900
+Epoch: 0, Batch: 78, Cost: 2.1443948746, PG:3.75504, Acc: 0.277, Acc: 0.078, Tau: 0.900
+Epoch: 0, Batch: 79, Cost: 2.1227519512, PG:3.72986, Acc: 0.328, Acc: 0.102, Tau: 0.900
+Epoch: 0, Batch: 80, Cost: 2.1192383766, PG:3.72577, Acc: 0.316, Acc: 0.094, Tau: 0.900
+Epoch: 0, Batch: 81, Cost: 2.1503429413, PG:3.76196, Acc: 0.270, Acc: 0.121, Tau: 0.900
+Epoch: 0, Batch: 82, Cost: 2.1347482204, PG:3.74382, Acc: 0.301, Acc: 0.090, Tau: 0.900
+Epoch: 0, Batch: 83, Cost: 2.0955147743, PG:3.69817, Acc: 0.355, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 84, Cost: 2.0767118931, PG:3.67629, Acc: 0.375, Acc: 0.102, Tau: 0.901
+Epoch: 0, Batch: 85, Cost: 2.0699090958, PG:3.66838, Acc: 0.414, Acc: 0.094, Tau: 0.900
+Epoch: 0, Batch: 86, Cost: 2.0750775337, PG:3.67439, Acc: 0.414, Acc: 0.145, Tau: 0.899
+Epoch: 0, Batch: 87, Cost: 2.0344150066, PG:3.62708, Acc: 0.520, Acc: 0.141, Tau: 0.900
+Epoch: 0, Batch: 88, Cost: 2.0854189396, PG:3.68642, Acc: 0.398, Acc: 0.078, Tau: 0.900
+Epoch: 0, Batch: 89, Cost: 2.0301012993, PG:3.62206, Acc: 0.477, Acc: 0.121, Tau: 0.899
+Epoch: 0, Batch: 90, Cost: 2.0865936279, PG:3.68779, Acc: 0.387, Acc: 0.102, Tau: 0.901
+Epoch: 0, Batch: 91, Cost: 2.0441555977, PG:3.63841, Acc: 0.461, Acc: 0.230, Tau: 0.900
+Epoch: 0, Batch: 92, Cost: 2.0395524502, PG:3.63306, Acc: 0.461, Acc: 0.238, Tau: 0.900
+Epoch: 0, Batch: 93, Cost: 2.0398728848, PG:3.63343, Acc: 0.430, Acc: 0.117, Tau: 0.899
+Epoch: 0, Batch: 94, Cost: 2.0113813877, PG:3.60028, Acc: 0.445, Acc: 0.102, Tau: 0.900
+Epoch: 0, Batch: 95, Cost: 2.0096154213, PG:3.59823, Acc: 0.469, Acc: 0.148, Tau: 0.900
+Epoch: 0, Batch: 96, Cost: 2.0146846771, PG:3.60412, Acc: 0.453, Acc: 0.066, Tau: 0.901
+Epoch: 0, Batch: 97, Cost: 1.9914397001, PG:3.57708, Acc: 0.461, Acc: 0.125, Tau: 0.900
+Epoch: 0, Batch: 98, Cost: 1.9953731298, PG:3.58165, Acc: 0.461, Acc: 0.152, Tau: 0.900
+Epoch: 0, Batch: 99, Cost: 1.9716427326, PG:3.55404, Acc: 0.488, Acc: 0.277, Tau: 0.900
+Epoch: 0, Batch: 100, Cost: 1.9419993162, PG:3.51955, Acc: 0.512, Acc: 0.180, Tau: 0.900
+Epoch: 0, Batch: 101, Cost: 1.9584128857, PG:3.53865, Acc: 0.492, Acc: 0.227, Tau: 0.901
+Epoch: 0, Batch: 102, Cost: 1.9678860903, PG:3.54967, Acc: 0.480, Acc: 0.211, Tau: 0.900
+Epoch: 0, Batch: 103, Cost: 1.9599493742, PG:3.54044, Acc: 0.516, Acc: 0.223, Tau: 0.900
+Epoch: 0, Batch: 104, Cost: 1.9290342331, PG:3.50447, Acc: 0.547, Acc: 0.160, Tau: 0.900
+Epoch: 0, Batch: 105, Cost: 1.9816224575, PG:3.56566, Acc: 0.488, Acc: 0.168, Tau: 0.899
+Epoch: 0, Batch: 106, Cost: 1.9183845520, PG:3.49208, Acc: 0.562, Acc: 0.160, Tau: 0.900
+Epoch: 0, Batch: 107, Cost: 1.9206902981, PG:3.49476, Acc: 0.543, Acc: 0.176, Tau: 0.900
+Epoch: 0, Batch: 108, Cost: 1.9293051958, PG:3.50478, Acc: 0.539, Acc: 0.207, Tau: 0.900
+Epoch: 0, Batch: 109, Cost: 1.9555215836, PG:3.53529, Acc: 0.504, Acc: 0.172, Tau: 0.901
+Epoch: 0, Batch: 110, Cost: 1.9283363819, PG:3.50366, Acc: 0.547, Acc: 0.211, Tau: 0.900
+Epoch: 0, Batch: 111, Cost: 1.9349398613, PG:3.51134, Acc: 0.527, Acc: 0.160, Tau: 0.900
+Epoch: 0, Batch: 112, Cost: 1.9386889935, PG:3.51570, Acc: 0.531, Acc: 0.148, Tau: 0.901
+Epoch: 0, Batch: 113, Cost: 1.9558018446, PG:3.53561, Acc: 0.504, Acc: 0.176, Tau: 0.900
+Epoch: 0, Batch: 114, Cost: 1.8970080614, PG:3.46720, Acc: 0.570, Acc: 0.219, Tau: 0.901
+Epoch: 0, Batch: 115, Cost: 1.9157859087, PG:3.48905, Acc: 0.539, Acc: 0.160, Tau: 0.899
+Epoch: 0, Batch: 116, Cost: 1.9083789587, PG:3.48044, Acc: 0.555, Acc: 0.184, Tau: 0.900
+Epoch: 0, Batch: 117, Cost: 1.9360580444, PG:3.51264, Acc: 0.504, Acc: 0.133, Tau: 0.900
+Epoch: 0, Batch: 118, Cost: 1.9117509127, PG:3.48436, Acc: 0.543, Acc: 0.125, Tau: 0.900
+Epoch: 0, Batch: 119, Cost: 1.9105103016, PG:3.48291, Acc: 0.551, Acc: 0.156, Tau: 0.899
+Epoch: 0, Batch: 120, Cost: 1.9208004475, PG:3.49489, Acc: 0.539, Acc: 0.156, Tau: 0.900
+Epoch: 0, Batch: 121, Cost: 1.9655004740, PG:3.54690, Acc: 0.492, Acc: 0.133, Tau: 0.900
+Epoch: 0, Batch: 122, Cost: 1.9056746960, PG:3.47729, Acc: 0.582, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 123, Cost: 1.9281291962, PG:3.50341, Acc: 0.551, Acc: 0.098, Tau: 0.899
+Epoch: 0, Batch: 124, Cost: 1.8810888529, PG:3.44868, Acc: 0.598, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 125, Cost: 1.8784806728, PG:3.44565, Acc: 0.609, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 126, Cost: 1.8956978321, PG:3.46568, Acc: 0.574, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 127, Cost: 1.8567516804, PG:3.42037, Acc: 0.625, Acc: 0.094, Tau: 0.899
+Epoch: 0, Batch: 128, Cost: 1.9045600891, PG:3.47599, Acc: 0.570, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 129, Cost: 1.9119243622, PG:3.48456, Acc: 0.555, Acc: 0.086, Tau: 0.899
+Epoch: 0, Batch: 130, Cost: 1.8737666607, PG:3.44016, Acc: 0.598, Acc: 0.078, Tau: 0.900
+Epoch: 0, Batch: 131, Cost: 1.8721106052, PG:3.43824, Acc: 0.605, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 132, Cost: 1.8852417469, PG:3.45351, Acc: 0.574, Acc: 0.082, Tau: 0.900
+Epoch: 0, Batch: 133, Cost: 1.8414812088, PG:3.40260, Acc: 0.641, Acc: 0.102, Tau: 0.899
+Epoch: 0, Batch: 134, Cost: 1.8713696003, PG:3.43737, Acc: 0.594, Acc: 0.168, Tau: 0.900
+Epoch: 0, Batch: 135, Cost: 1.8684037924, PG:3.43392, Acc: 0.613, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 136, Cost: 1.8599923849, PG:3.42414, Acc: 0.598, Acc: 0.125, Tau: 0.900
+Epoch: 0, Batch: 137, Cost: 1.9046146870, PG:3.47606, Acc: 0.555, Acc: 0.078, Tau: 0.900
+Epoch: 0, Batch: 138, Cost: 1.8391907215, PG:3.39993, Acc: 0.625, Acc: 0.094, Tau: 0.900
+Epoch: 0, Batch: 139, Cost: 1.8467783928, PG:3.40876, Acc: 0.641, Acc: 0.090, Tau: 0.899
+Epoch: 0, Batch: 140, Cost: 1.8952423334, PG:3.46515, Acc: 0.598, Acc: 0.121, Tau: 0.899
+Epoch: 0, Batch: 141, Cost: 1.8461135626, PG:3.40799, Acc: 0.680, Acc: 0.133, Tau: 0.900
+Epoch: 0, Batch: 142, Cost: 1.8760643005, PG:3.44284, Acc: 0.598, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 143, Cost: 1.7871233225, PG:3.33935, Acc: 0.723, Acc: 0.133, Tau: 0.899
+Epoch: 0, Batch: 144, Cost: 1.8290311098, PG:3.38811, Acc: 0.668, Acc: 0.090, Tau: 0.901
+Epoch: 0, Batch: 145, Cost: 1.7928154469, PG:3.34597, Acc: 0.707, Acc: 0.141, Tau: 0.900
+Epoch: 0, Batch: 146, Cost: 1.8200805187, PG:3.37770, Acc: 0.641, Acc: 0.137, Tau: 0.900
+Epoch: 0, Batch: 147, Cost: 1.8248457909, PG:3.38324, Acc: 0.652, Acc: 0.109, Tau: 0.899
+Epoch: 0, Batch: 148, Cost: 1.8555805683, PG:3.41900, Acc: 0.629, Acc: 0.078, Tau: 0.899
+Epoch: 0, Batch: 149, Cost: 1.8361010551, PG:3.39634, Acc: 0.637, Acc: 0.086, Tau: 0.900
+Epoch: 0, Batch: 150, Cost: 1.8020995855, PG:3.35678, Acc: 0.691, Acc: 0.082, Tau: 0.899
+Epoch: 0, Batch: 151, Cost: 1.8294107914, PG:3.38855, Acc: 0.641, Acc: 0.160, Tau: 0.901
+Epoch: 0, Batch: 152, Cost: 1.8070149422, PG:3.36250, Acc: 0.664, Acc: 0.160, Tau: 0.901
+Epoch: 0, Batch: 153, Cost: 1.8153697252, PG:3.37222, Acc: 0.668, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 154, Cost: 1.8062716722, PG:3.36163, Acc: 0.668, Acc: 0.211, Tau: 0.900
+Epoch: 0, Batch: 155, Cost: 1.8030686378, PG:3.35790, Acc: 0.680, Acc: 0.168, Tau: 0.900
+Epoch: 0, Batch: 156, Cost: 1.8140733242, PG:3.37071, Acc: 0.656, Acc: 0.156, Tau: 0.901
+Epoch: 0, Batch: 157, Cost: 1.7824845314, PG:3.33395, Acc: 0.695, Acc: 0.188, Tau: 0.900
+Epoch: 0, Batch: 158, Cost: 1.8187580109, PG:3.37616, Acc: 0.645, Acc: 0.152, Tau: 0.901
+Epoch: 0, Batch: 159, Cost: 1.8052402735, PG:3.36043, Acc: 0.680, Acc: 0.168, Tau: 0.901
+Epoch: 0, Batch: 160, Cost: 1.7474052906, PG:3.29314, Acc: 0.734, Acc: 0.184, Tau: 0.900
+Epoch: 0, Batch: 161, Cost: 1.7280956507, PG:3.27067, Acc: 0.754, Acc: 0.168, Tau: 0.900
+Epoch: 0, Batch: 162, Cost: 1.7838735580, PG:3.33557, Acc: 0.691, Acc: 0.180, Tau: 0.899
+Epoch: 0, Batch: 163, Cost: 1.7769271135, PG:3.32749, Acc: 0.695, Acc: 0.211, Tau: 0.901
+Epoch: 0, Batch: 164, Cost: 1.7852174044, PG:3.33713, Acc: 0.680, Acc: 0.164, Tau: 0.900
+Epoch: 0, Batch: 165, Cost: 1.7385042906, PG:3.28278, Acc: 0.734, Acc: 0.199, Tau: 0.900
+Epoch: 0, Batch: 166, Cost: 1.7670586109, PG:3.31601, Acc: 0.699, Acc: 0.148, Tau: 0.901
+Epoch: 0, Batch: 167, Cost: 1.8120694160, PG:3.36838, Acc: 0.656, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 168, Cost: 1.7589436769, PG:3.30656, Acc: 0.715, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 169, Cost: 1.7740232944, PG:3.32411, Acc: 0.695, Acc: 0.059, Tau: 0.900
+Epoch: 0, Batch: 170, Cost: 1.7358409166, PG:3.27968, Acc: 0.727, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 171, Cost: 1.7852817774, PG:3.33721, Acc: 0.684, Acc: 0.105, Tau: 0.900
+Epoch: 0, Batch: 172, Cost: 1.7863727808, PG:3.33848, Acc: 0.684, Acc: 0.070, Tau: 0.900
+Epoch: 0, Batch: 173, Cost: 1.7490510941, PG:3.29505, Acc: 0.727, Acc: 0.145, Tau: 0.900
+Epoch: 0, Batch: 174, Cost: 1.7214025259, PG:3.26288, Acc: 0.754, Acc: 0.184, Tau: 0.901
+Epoch: 0, Batch: 175, Cost: 1.7659499645, PG:3.31472, Acc: 0.703, Acc: 0.203, Tau: 0.900
+Epoch: 0, Batch: 176, Cost: 1.7707202435, PG:3.32027, Acc: 0.688, Acc: 0.230, Tau: 0.900
+Epoch: 0, Batch: 177, Cost: 1.7873855829, PG:3.33966, Acc: 0.672, Acc: 0.191, Tau: 0.899
+Epoch: 0, Batch: 178, Cost: 1.7343020439, PG:3.27789, Acc: 0.734, Acc: 0.180, Tau: 0.900
+Epoch: 0, Batch: 179, Cost: 1.7577686310, PG:3.30520, Acc: 0.707, Acc: 0.156, Tau: 0.899
+Epoch: 0, Batch: 180, Cost: 1.7581239939, PG:3.30561, Acc: 0.715, Acc: 0.094, Tau: 0.900
+Epoch: 0, Batch: 181, Cost: 1.7643650770, PG:3.31287, Acc: 0.711, Acc: 0.066, Tau: 0.900
+Epoch: 0, Batch: 182, Cost: 1.7577214241, PG:3.30514, Acc: 0.715, Acc: 0.152, Tau: 0.900
+Epoch: 0, Batch: 183, Cost: 1.7391340733, PG:3.28352, Acc: 0.734, Acc: 0.207, Tau: 0.901
+Epoch: 0, Batch: 184, Cost: 1.7883198261, PG:3.34074, Acc: 0.680, Acc: 0.191, Tau: 0.901
+Epoch: 0, Batch: 185, Cost: 1.7569252253, PG:3.30422, Acc: 0.711, Acc: 0.195, Tau: 0.900
+Epoch: 0, Batch: 186, Cost: 1.7727638483, PG:3.32264, Acc: 0.695, Acc: 0.184, Tau: 0.900
+Epoch: 0, Batch: 187, Cost: 1.7583016157, PG:3.30582, Acc: 0.707, Acc: 0.211, Tau: 0.901
+Epoch: 0, Batch: 188, Cost: 1.7732676268, PG:3.32323, Acc: 0.691, Acc: 0.215, Tau: 0.900
+Epoch: 0, Batch: 189, Cost: 1.7540643215, PG:3.30089, Acc: 0.719, Acc: 0.156, Tau: 0.900
+Epoch: 0, Batch: 190, Cost: 1.7640899420, PG:3.31255, Acc: 0.699, Acc: 0.168, Tau: 0.900
+Epoch: 0, Batch: 191, Cost: 1.7128214836, PG:3.25290, Acc: 0.766, Acc: 0.180, Tau: 0.900
+Epoch: 0, Batch: 192, Cost: 1.7527490854, PG:3.29936, Acc: 0.707, Acc: 0.156, Tau: 0.900
+Epoch: 0, Batch: 193, Cost: 1.7187505960, PG:3.25980, Acc: 0.734, Acc: 0.141, Tau: 0.900
+Epoch: 0, Batch: 194, Cost: 1.7091621161, PG:3.24864, Acc: 0.758, Acc: 0.156, Tau: 0.900
+Epoch: 0, Batch: 195, Cost: 1.7219866514, PG:3.26356, Acc: 0.746, Acc: 0.133, Tau: 0.900
+Epoch: 0, Batch: 196, Cost: 1.7375968695, PG:3.28173, Acc: 0.723, Acc: 0.133, Tau: 0.900
+Epoch: 0, Batch: 197, Cost: 1.7232635021, PG:3.26505, Acc: 0.746, Acc: 0.180, Tau: 0.900
+Epoch: 0, Batch: 198, Cost: 1.7441934347, PG:3.28940, Acc: 0.727, Acc: 0.160, Tau: 0.901
+Epoch: 0, Batch: 199, Cost: 1.7397407293, PG:3.28422, Acc: 0.727, Acc: 0.180, Tau: 0.900
+Epoch: 0, Batch: 200, Cost: 1.7745099068, PG:3.32468, Acc: 0.695, Acc: 0.191, Tau: 0.900
+Epoch: 0, Batch: 201, Cost: 1.7173944712, PG:3.25822, Acc: 0.754, Acc: 0.215, Tau: 0.901
+Epoch: 0, Batch: 202, Cost: 1.7600133419, PG:3.30781, Acc: 0.715, Acc: 0.211, Tau: 0.900
+Epoch: 0, Batch: 203, Cost: 1.7384737730, PG:3.28275, Acc: 0.723, Acc: 0.223, Tau: 0.900
+Epoch: 0, Batch: 204, Cost: 1.7064993382, PG:3.24554, Acc: 0.766, Acc: 0.180, Tau: 0.900
+Epoch: 0, Batch: 205, Cost: 1.7260828018, PG:3.26833, Acc: 0.746, Acc: 0.191, Tau: 0.900
+Epoch: 0, Batch: 206, Cost: 1.7746534348, PG:3.32484, Acc: 0.688, Acc: 0.156, Tau: 0.899
+Epoch: 0, Batch: 207, Cost: 1.7238167524, PG:3.26569, Acc: 0.742, Acc: 0.160, Tau: 0.900
+Epoch: 0, Batch: 208, Cost: 1.7534935474, PG:3.30022, Acc: 0.715, Acc: 0.227, Tau: 0.899
+Epoch: 0, Batch: 209, Cost: 1.7503998280, PG:3.29662, Acc: 0.715, Acc: 0.281, Tau: 0.900
+Epoch: 0, Batch: 210, Cost: 1.7185856104, PG:3.25961, Acc: 0.754, Acc: 0.250, Tau: 0.900
+Epoch: 0, Batch: 211, Cost: 1.7187107801, PG:3.25975, Acc: 0.750, Acc: 0.133, Tau: 0.900
+Epoch: 0, Batch: 212, Cost: 1.7424215078, PG:3.28734, Acc: 0.723, Acc: 0.109, Tau: 0.900
+Epoch: 0, Batch: 213, Cost: 1.7227172852, PG:3.26441, Acc: 0.750, Acc: 0.129, Tau: 0.900
+Epoch: 0, Batch: 214, Cost: 1.7621444464, PG:3.31029, Acc: 0.707, Acc: 0.113, Tau: 0.900
+Epoch: 0, Batch: 215, Cost: 1.7299219370, PG:3.27280, Acc: 0.734, Acc: 0.098, Tau: 0.900
+Epoch: 0, Batch: 216, Cost: 1.7671339512, PG:3.31609, Acc: 0.691, Acc: 0.094, Tau: 0.898
+Epoch: 0, Batch: 217, Cost: 1.7466100454, PG:3.29221, Acc: 0.719, Acc: 0.102, Tau: 0.900
+Epoch: 0, Batch: 218, Cost: 1.7544000149, PG:3.30128, Acc: 0.703, Acc: 0.121, Tau: 0.900
+Epoch: 0, Batch: 219, Cost: 1.7439724207, PG:3.28914, Acc: 0.719, Acc: 0.273, Tau: 0.900
+Epoch: 0, Batch: 220, Cost: 1.7529001236, PG:3.29953, Acc: 0.715, Acc: 0.258, Tau: 0.901
+Epoch: 0, Batch: 221, Cost: 1.7405030727, PG:3.28511, Acc: 0.723, Acc: 0.320, Tau: 0.900
+Epoch: 0, Batch: 222, Cost: 1.7346302271, PG:3.27827, Acc: 0.727, Acc: 0.316, Tau: 0.899
+Epoch: 0, Batch: 223, Cost: 1.7325406075, PG:3.27584, Acc: 0.734, Acc: 0.332, Tau: 0.900
+Epoch: 0, Batch: 224, Cost: 1.7437826395, PG:3.28892, Acc: 0.715, Acc: 0.344, Tau: 0.901
+Epoch: 0, Batch: 225, Cost: 1.7603690624, PG:3.30822, Acc: 0.711, Acc: 0.340, Tau: 0.900
+Epoch: 0, Batch: 226, Cost: 1.7643886805, PG:3.31290, Acc: 0.707, Acc: 0.324, Tau: 0.901
+Epoch: 0, Batch: 227, Cost: 1.7594614029, PG:3.30717, Acc: 0.699, Acc: 0.305, Tau: 0.901
+Epoch: 0, Batch: 228, Cost: 1.7457304001, PG:3.29119, Acc: 0.730, Acc: 0.273, Tau: 0.900
+Epoch: 0, Batch: 229, Cost: 1.7222403288, PG:3.26386, Acc: 0.738, Acc: 0.328, Tau: 0.900
+Epoch: 0, Batch: 230, Cost: 1.7309563160, PG:3.27400, Acc: 0.742, Acc: 0.273, Tau: 0.900
+Epoch: 0, Batch: 231, Cost: 1.7676813602, PG:3.31673, Acc: 0.699, Acc: 0.262, Tau: 0.901
+Epoch: 0, Batch: 232, Cost: 1.7323012352, PG:3.27557, Acc: 0.730, Acc: 0.293, Tau: 0.900
+Epoch: 0, Batch: 233, Cost: 1.7331054211, PG:3.27650, Acc: 0.738, Acc: 0.293, Tau: 0.900
+Epoch: 0, Batch: 234, Cost: 1.6961816549, PG:3.23354, Acc: 0.771, Acc: 0.323, Tau: 0.900
+Epoch: 0, Cost: 1.985776711524801, Accuracy: 0.5034962322695036
+Traceback (most recent call last):
+  File "C:\Users\dongjae\Desktop\condnet-g\main_condg_exc_output.py", line 399, in main
+    us, p = gnn_policy(hs, adj_)  # run gnn
+  File "C:\Users\dongjae\Anaconda3\envs\condnet-g\lib\site-packages\torch\nn\modules\module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "C:\Users\dongjae\Anaconda3\envs\condnet-g\lib\site-packages\torch\nn\modules\module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\dongjae\Desktop\condnet-g\main_condg_exc_output.py", line 82, in forward
+    hs = F.sigmoid(self.conv1(hs_0, batch_adj))
+  File "C:\Users\dongjae\Anaconda3\envs\condnet-g\lib\site-packages\torch\nn\modules\module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "C:\Users\dongjae\Anaconda3\envs\condnet-g\lib\site-packages\torch\nn\modules\module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\dongjae\Anaconda3\envs\condnet-g\lib\site-packages\torch_geometric\nn\dense\dense_sage_conv.py", line 62, in forward
+    out = torch.matmul(adj, x)
+RuntimeError: Expected size for first two dimensions of batch2 tensor to be: [256, 1552] but got: [256, 1562].

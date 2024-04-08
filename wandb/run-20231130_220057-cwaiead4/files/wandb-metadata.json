@@ -1,0 +1,53 @@
+{
+    "os": "Windows-10-10.0.22631-SP0",
+    "python": "3.9.18",
+    "heartbeatAt": "2023-11-30T13:00:58.969853",
+    "startedAt": "2023-11-30T13:00:57.938880",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "C:\\Users\\dongjae\\Desktop\\condnet-g\\main_svhng_biggert2.py",
+    "codePathLocal": "main_svhng_biggert2.py",
+    "codePath": "main_svhng_biggert2.py",
+    "git": {
+        "remote": "https://github.com/dongjaekim-hail/condnet-g.git",
+        "commit": "9f9b62e0050f1196722ba183293ba94926fe6c14"
+    },
+    "email": "dongjaekim@dankook.ac.kr",
+    "root": "C:/Users/dongjae/Desktop/condnet-g",
+    "host": "DESKTOP-LTTJJ7Q",
+    "username": "dongjae",
+    "executable": "C:\\Users\\dongjae\\Anaconda3\\envs\\condnet-g\\python.exe",
+    "cpu_count": 16,
+    "cpu_count_logical": 24,
+    "cpu_freq": {
+        "current": 3400.0,
+        "min": 0.0,
+        "max": 3400.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3400.0,
+            "min": 0.0,
+            "max": 3400.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 878.1542930603027,
+            "used": 609.979549407959
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 3080",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 3080",
+            "memory_total": 10737418240
+        }
+    ],
+    "memory": {
+        "total": 63.856868743896484
+    }
+}
