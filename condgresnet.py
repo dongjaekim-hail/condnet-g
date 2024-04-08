@@ -16,7 +16,7 @@ import wandb
 
 
 # wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
-# wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
+# wandb.login(key="")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'cpu'
 
