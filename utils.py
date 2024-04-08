@@ -1,9 +1,9 @@
 import huggingface_hub
-
+from datasets import load_dataset
 
 def download_imagenet(dir2save):
     # Download the dataset imagenet 1k
-    dataset = huggingface_hub.dataset("imagenet")
+    dataset = load_dataset('imagenet-1k', data_dir=dir2save)
 
     # Print the dataset
     print(dataset)
@@ -13,4 +13,4 @@ def download_imagenet(dir2save):
 
 
 if __name__ == '__main__':
-    download_imagenet()
+    download_imagenet("D:\imagenet-1k")
