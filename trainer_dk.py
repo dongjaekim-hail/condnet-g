@@ -1,7 +1,7 @@
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import ImageFolder
 import torch.optim as optim
 import torch.nn as nn
@@ -11,85 +11,9 @@ import numpy as np
 import torch.nn.functional as F
 from datetime import datetime
 import wandb
-# import os
-# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+from transformers import Trainer, EarlyStoppingCallback, TrainingArguments
 from pynvml import *
-import pytorch_lightning as pl
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from pytorch_lightning.loggers import WandbLogger
-from argparse import ArgumentParser
-
-
-# 이전에 정의한 모델 클래스를 포함하는 LightningModule을 정의합니다.
-class CondNetModule(pl.LightningModule):
-    def __init__(self, hparams):
-        super(CondNetModule, self).__init__()
-        self.hparams = hparams
-        self.model = ResNet50()  # 모델 인스턴스를 여기에 포함합니다.
-        self.gnn_policy = Gnn(minprob=self.hparams.condnet_min_prob, maxprob=self.hparams.condnet_max_prob,
-                              hidden_size=self.hparams.hidden_size)
-        self.adj_, self.num_channels_ls = self.adj(self.model)  # adj 함수를 적절하게 정의해야 합니다.
-        self.criterion = torch.nn.CrossEntropyLoss()
-
-    def forward(self, x, cond_drop=False, us=None, channels=None):
-        return self.model(x, cond_drop, us, channels)
-
-    def training_step(self, batch, batch_idx):
-        # 학습 스텝 정의
-        inputs, labels = batch
-        outputs, hs = self(inputs)  # 모델의 forward를 호출
-        loss = self.criterion(outputs, labels)
-        self.log('train_loss', loss)
-        return loss
-
-    def configure_optimizers(self):
-        # 옵티마이저와 스케줄러를 구성합니다.
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-        return optimizer
-
-    def train_dataloader(self):
-        # 학습 데이터 로더를 반환합니다.
-        transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ])
-        dataset = load_from_disk(self.hparams.train_data_path)  # 데이터셋 경로를 hparams로부터 가져옵니다.
-        return DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True)
-
-
-# 아래는 학습을 시작하는 main 함수입니다.
-def main(hparams):
-    model = CondNetModule(hparams)
-    logger = WandbLogger(project="condgnet", entity="hails", name="resnet50_imagenet")
-
-    # 콜백 정의
-    checkpoint_callback = ModelCheckpoint(
-        monitor='train_loss',
-        dirpath='./model_checkpoints',
-        filename='condnet-{epoch:02d}-{train_loss:.2f}',
-        save_top_k=3,
-        mode='min',
-    )
-    early_stop_callback = EarlyStopping(
-        monitor='train_loss',
-        min_delta=0.00,
-        patience=10,
-        verbose=False,
-        mode='min'
-    )
-
-    # Trainer 인스턴스 생성
-    trainer = Trainer(
-        max_epochs=hparams.max_epochs,
-        logger=logger,
-        callbacks=[checkpoint_callback, early_stop_callback],
-        gpus=1 if torch.cuda.is_available() else 0
-    )
-
-    # 학습 시작
-    trainer.fit(model)
+from datasets import load_from_disk
 
 # wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
 # wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
@@ -103,8 +27,6 @@ def print_gpu_utilization():
     handle = nvmlDeviceGetHandleByIndex(0)
     info = nvmlDeviceGetMemoryInfo(handle)
     print(f"GPU memory occupied: {info.used//1024**2} MB.")
-
-
 def print_summary(result):
     print(f"Time: {result.metrics['train_runtime']:.2f}")
     print(f"Samples/second: {result.metrics['train_samples_per_second']:.2f}")
@@ -351,6 +273,18 @@ class Gnn(nn.Module):
 
         return u, p
 
+class ImagenetDataset(Dataset):
+    def __init__(self, dataset_path, transform=None):
+        self.dataset = load_from_disk(dataset_path)
+        self.transform = transform
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        image, label = item['image'], item['label']
+        if self.transform:
+            image = self.transform(image)
+        return image, label
 def main():
     # get args
     now = datetime.now()
@@ -393,15 +327,131 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
-    # trainset = torchvision.datasets.ImageNet('./data', split='train', transform=transform)
-    # trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
-    #
-    # testset = torchvision.datasets.ImageNet('./data', split='val', transform=transform)
-    # testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False)
-    # train_dataset = ImageFolder('C:/Users/97dnd/anaconda3/envs/torch/pr/resnet/data/ILSVRC2012_img_train',
-    #                             transform=transform)
-    # val_dataset = ImageFolder('C:/Users/97dnd/anaconda3/envs/torch/pr/resnet/data/ILSVRC2012_img_val',
-    #                           transform=transform)
+
+    time = datetime.now()
+    train_dataset = ImagenetDataset('D:/imagenet-1k/train', transform=transform)
+    val_dataset = ImagenetDataset('D:/imagenet-1k/validation', transform=transform)
+
+    # 데이터로더 생성
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=12, pin_memory=True,
+                              prefetch_factor=2, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4,
+                            pin_memory=True, prefetch_factor=2, persistent_workers=True)
+
+    elapsed_time = datetime.now() - time
+    print('Data loading time: ', elapsed_time,'minutes')
+
+    resnet = ResNet50()
+    resnet = resnet.to(device)
+    for param in resnet.parameters():
+        param.requires_grad = True
+    criterion = nn.CrossEntropyLoss()
+    resnet_optimizer = optim.SGD(resnet.parameters(), lr=learning_rate,
+                              momentum=0.9, weight_decay=lambda_l2)
+
+    #torch sync
+    torch.cuda.synchronize()
+    time= datetime.now()
+
+    # run for 50 epochs
+    for epoch in range(5):
+        bn = 0
+        costs = 0
+        accs = 0
+        accsbf = 0
+        PGs = 0
+        num_iteration = 0
+        taus = 0
+        Ls = 0
+        resnet.train()
+        resnet_optimizer.zero_grad()
+
+        L_accum = []
+        c_accum = []
+        PG_accum = []
+        acc_accum = []
+        accbf_accum = []
+        tau_accum = []
+
+
+        for i, data in enumerate(train_loader, start=0):
+            resnet_optimizer.zero_grad()
+
+            if args.compact:
+                if i > 50:
+                    break
+
+            bn += 1
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            outputs, hs = resnet(inputs)
+
+            y_one_hot = torch.zeros(labels.shape[0], 1000)
+            y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
+            pred_1 = torch.argmax(outputs, dim=1)
+
+            c = criterion(F.softmax(outputs,dim=0), labels.to(device))
+            acc = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+            print_gpu_utilization()
+            c_accum.append(c.item())
+            acc_accum.append(acc)
+            c.backward()
+            resnet_optimizer.step()
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(
+                    epoch, i, np.sum(c_accum)/args.accum_step, np.sum(PG_accum)/args.accum_step, np.mean(acc_accum),
+                    np.mean(accbf_accum), np.mean(tau_accum)))
+
+
+    torch.cuda.synchronize()
+    # print elpased time
+    elapsed_time = datetime.now() - time
+    print('Elapsed time: ', elapsed_time, 'minutes')
+
+
+
+def main_prev():
+    # get args
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+    import argparse
+    args = argparse.ArgumentParser()
+    args.add_argument('--nlayers', type=int, default=3)
+    args.add_argument('--lambda_s', type=float, default=7)
+    args.add_argument('--lambda_v', type=float, default=1.2)
+    args.add_argument('--lambda_l2', type=float, default=5e-4)
+    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--tau', type=float, default=0.6)
+    args.add_argument('--max_epochs', type=int, default=50)
+    # args.add_argument('--condnet_min_prob', type=float, default=0.01)
+    # args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--condnet_min_prob', type=float, default=0.1)
+    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--learning_rate', type=float, default=0.001)
+    args.add_argument('--BATCH_SIZE', type=int, default=8)
+    args.add_argument('--compact', type=bool, default=False)
+    args.add_argument('--hidden-size', type=int, default=256)
+    args.add_argument('--accum-step', type=int, default=8)
+    args = args.parse_args()
+
+    lambda_s = args.lambda_s
+    lambda_v = args.lambda_v
+    lambda_l2 = args.lambda_l2
+    lambda_pg = args.lambda_pg
+    tau = args.tau
+    learning_rate = args.learning_rate
+    max_epochs = args.max_epochs
+    BATCH_SIZE = args.BATCH_SIZE
+    condnet_min_prob = args.condnet_min_prob
+    condnet_max_prob = args.condnet_max_prob
+    compact = args.compact
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
+
     from datasets import load_from_disk
 
     time = datetime.now()
