@@ -13,12 +13,26 @@ from datetime import datetime
 import wandb
 # import os
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-
+from pynvml import *
 
 # wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
 # wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'cpu'
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.benchmark=True
+
+def print_gpu_utilization():
+    nvmlInit()
+    handle = nvmlDeviceGetHandleByIndex(0)
+    info = nvmlDeviceGetMemoryInfo(handle)
+    print(f"GPU memory occupied: {info.used//1024**2} MB.")
+
+
+def print_summary(result):
+    print(f"Time: {result.metrics['train_runtime']:.2f}")
+    print(f"Samples/second: {result.metrics['train_samples_per_second']:.2f}")
+    print_gpu_utilization()
 
 class ResNet50(torch.nn.Module):
     def __init__(self):
@@ -308,15 +322,25 @@ def main():
     #
     # testset = torchvision.datasets.ImageNet('./data', split='val', transform=transform)
     # testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False)
+    # train_dataset = ImageFolder('C:/Users/97dnd/anaconda3/envs/torch/pr/resnet/data/ILSVRC2012_img_train',
+    #                             transform=transform)
+    # val_dataset = ImageFolder('C:/Users/97dnd/anaconda3/envs/torch/pr/resnet/data/ILSVRC2012_img_val',
+    #                           transform=transform)
+    from datasets import load_from_disk
 
-    train_dataset = ImageFolder('C:/Users/97dnd/anaconda3/envs/torch/pr/resnet/data/ILSVRC2012_img_train',
-                                transform=transform)
-    val_dataset = ImageFolder('C:/Users/97dnd/anaconda3/envs/torch/pr/resnet/data/ILSVRC2012_img_val',
-                              transform=transform)
+    time = datetime.now()
+
+    train_dataset = load_from_disk('D:/imagenet-1k/train')
+    val_dataset = load_from_disk('D:/imagenet-1k/validation')
 
     # 데이터로더 생성
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=12, pin_memory=True,
+                              prefetch_factor=2, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=12,
+                            pin_memory=True, prefetch_factor=2, persistent_workers=True)
+
+    elapsed_time = datetime.now() - time
+    print('Data loading time: ', elapsed_time/60,'minutes')
 
     resnet = ResNet50()
     resnet = resnet.to(device)
