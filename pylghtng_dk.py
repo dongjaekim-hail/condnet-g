@@ -15,12 +15,90 @@ from transformers import Trainer, EarlyStoppingCallback, TrainingArguments
 from pynvml import *
 from datasets import load_from_disk
 from tqdm import tqdm
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from torchmetrics.functional import accuracy
+
 # wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
 # wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'cpu'
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.benchmark=True
+
+class CondNetModule(pl.LightningModule):
+    def __init__(self, args, resnet_model, gnn_policy, adj_, num_channels_ls):
+        super().__init__()
+        self.args = args
+        self.resnet_model = resnet_model
+        self.gnn_policy = gnn_policy
+        self.adj_ = adj_
+        self.num_channels_ls = num_channels_ls
+        self.criterion = torch.nn.CrossEntropyLoss()
+
+        # PyTorch Lightning에서는 모델 또는 옵티마이저에 대한 모든 설정을 `self`에 저장해야 합니다.
+        self.save_hyperparameters()
+
+    def forward(self, inputs, cond_drop=False, us=None, channels=None):
+        # 모델의 순전파 로직을 여기에 정의합니다.
+        return self.resnet_model(inputs, cond_drop, us, channels)
+
+    def training_step(self, batch, batch_idx):
+        inputs, labels = batch
+        outputs_surrogate, hs = self.resnet_model(inputs)
+        us, p = self.gnn_policy(hs, self.adj_)
+        outputs, hs = self.forward(inputs, cond_drop=True, us=us.detach(), channels=self.num_channels_ls)
+
+        loss = self.criterion(outputs, labels)
+        # 손실, 로그 및 기타 값의 반환은 여기서 처리합니다.
+        self.log('train_loss', loss)
+        return loss
+
+    def configure_optimizers(self):
+        # 옵티마이저와 스케줄러
+        resnet_optimizer = torch.optim.SGD(self.resnet_model.parameters(), lr=self.args.learning_rate, momentum=0.9,
+                                           weight_decay=self.args.lambda_l2)
+        policy_optimizer = torch.optim.SGD(self.gnn_policy.parameters(), lr=self.args.learning_rate, momentum=0.9,
+                                           weight_decay=self.args.lambda_l2)
+        return [resnet_optimizer, policy_optimizer], []
+
+class ResNetModule(pl.LightningModule):
+    def __init__(self, args, resnet_model):
+        super().__init__()
+        self.args = args
+        self.resnet_model = resnet_model
+        self.criterion = torch.nn.CrossEntropyLoss()
+
+        # PyTorch Lightning에서는 모델 또는 옵티마이저에 대한 모든 설정을 `self`에 저장해야 합니다.
+        self.save_hyperparameters()
+
+    def forward(self, inputs):
+        # 모델의 순전파 로직을 여기에 정의합니다.
+        return self.resnet_model(inputs)
+
+    def training_step(self, batch, batch_idx):
+        inputs, labels = batch
+        outputs = self.forward(inputs)
+        loss = self.criterion(F.log_softmax(outputs, dim=1), labels)
+        # 손실, 로그 및 기타 값의 반환은 여기서 처리합니다.
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        inputs, labels = batch
+        outputs = self.forward(inputs)
+        loss = self.criterion(F.log_softmax(outputs, dim=1), labels)
+        val_acc = accuracy(torch.argmax(loss, dim=1), labels)
+        self.log('val_loss', loss, prog_bar=True)
+        self.log('val_acc', val_acc, prog_bar=True)
+
+    def configure_optimizers(self):
+        # 옵티마이저와 스케줄러
+        resnet_optimizer = torch.optim.Adam(self.resnet_model.parameters(), lr=self.args.learning_rate,
+                                           weight_decay=self.args.lambda_l2)
+        return resnet_optimizer
+
 
 def print_gpu_utilization():
     nvmlInit()
@@ -160,7 +238,6 @@ class ResNet50(torch.nn.Module):
             x = self.fc(x)
 
         return x, hs
-
 def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
     # resnet_model = models.resnet50(pretrained=True)
     if last_layer:
@@ -238,7 +315,6 @@ def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
         # make sure every element that is non-zero is 1
     adjmatrix[adjmatrix != 0] = 1
     return adjmatrix, num_channels_ls
-
 class Gnn(nn.Module):
     def __init__(self, minprob, maxprob, hidden_size = 64):
         super().__init__()
@@ -272,146 +348,52 @@ class Gnn(nn.Module):
         u = torch.bernoulli(p).to(device)
 
         return u, p
+class ImageNetDataModule(pl.LightningDataModule):
+    def __init__(self, data_dir: str = './data', batch_size: int = 32):
+        super().__init__()
+        self.data_dir = data_dir
+        self.batch_size = batch_size
 
-class ImagenetDataset(Dataset):
-    def __init__(self, dataset_path, transform=None):
-        self.dataset = load_from_disk(dataset_path)
+        transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.Grayscale(num_output_channels=3),  # Convert grayscale to RGB 
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+
         self.transform = transform
     def __len__(self):
-        return len(self.dataset)
+        return len(self.train_dataset)
     def __getitem__(self, idx):
         item = self.dataset[idx]
         image, label = item['image'], item['label']
         if self.transform:
             image = self.transform(image)
         return image, label
+
+    def setup(self, stage=None):
+        class ImagenetDataset(Dataset):
+            def __init__(self, dataset_path, transform=self.transform):
+                self.dataset = load_from_disk(dataset_path)
+                self.transform = transform
+
+            def __len__(self):
+                return len(self.dataset)
+
+            def __getitem__(self, idx):
+                item = self.dataset[idx]
+                image, label = item['image'], item['label']
+                if self.transform:
+                    image = self.transform(image)
+                return image, label
+        self.train_dataset = ImagenetDataset(os.path.join(self.data_dir, 'train'), transform=self.transform)
+        self.val_dataset =  ImagenetDataset(os.path.join(self.data_dir, 'validation'), transform=self.transform)
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+    def val_dataloader(self):
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=True)
+
 def main():
-    # get args
-    now = datetime.now()
-    dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
-    import argparse
-    args = argparse.ArgumentParser()
-    args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=7)
-    args.add_argument('--lambda_v', type=float, default=1.2)
-    args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=50)
-    # args.add_argument('--condnet_min_prob', type=float, default=0.01)
-    # args.add_argument('--condnet_max_prob', type=float, default=0.9)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.9)
-    args.add_argument('--learning_rate', type=float, default=0.001)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
-    args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=8)
-    args = args.parse_args()
-
-    lambda_s = args.lambda_s
-    lambda_v = args.lambda_v
-    lambda_l2 = args.lambda_l2
-    lambda_pg = args.lambda_pg
-    tau = args.tau
-    learning_rate = args.learning_rate
-    max_epochs = args.max_epochs
-    BATCH_SIZE = args.BATCH_SIZE
-    condnet_min_prob = args.condnet_min_prob
-    condnet_max_prob = args.condnet_max_prob
-    compact = args.compact
-
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to RGB
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    ])
-
-    time = datetime.now()
-    dir2save = 'D:/imagenet-1k/'
-    dir2save = '/Users/dongjaekim/Documents/imagenet'
-    train_dataset = ImagenetDataset(os.path.join(dir2save, 'train'), transform=transform)
-    val_dataset = ImagenetDataset(os.path.join(dir2save, 'validation'), transform=transform)
-
-    # 데이터로더 생성
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=12, pin_memory=True,
-                              prefetch_factor=2, persistent_workers=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4,
-                            pin_memory=True, prefetch_factor=2, persistent_workers=True)
-
-    elapsed_time = datetime.now() - time
-    print('Data loading time: ', elapsed_time,'minutes')
-
-    resnet = ResNet50()
-    resnet = resnet.to(device)
-    for param in resnet.parameters():
-        param.requires_grad = True
-    criterion = nn.CrossEntropyLoss()
-    resnet_optimizer = optim.SGD(resnet.parameters(), lr=learning_rate,
-                              momentum=0.9, weight_decay=lambda_l2)
-
-    #torch sync
-    # torch.cuda.synchronize(device)
-    time= datetime.now()
-
-    # run for 50 epochs
-    for epoch in range(1):
-        bn = 0
-        costs = 0
-        accs = 0
-        accsbf = 0
-        PGs = 0
-        num_iteration = 0
-        taus = 0
-        Ls = 0
-        resnet.train()
-        resnet_optimizer.zero_grad()
-
-        L_accum = []
-        c_accum = []
-        PG_accum = []
-        acc_accum = []
-        accbf_accum = []
-        tau_accum = []
-
-
-        for i, data in enumerate(tqdm(train_loader), start=0):
-            resnet_optimizer.zero_grad()
-
-            if args.compact:
-                if i > 50:
-                    break
-
-            bn += 1
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
-
-            outputs, hs = resnet(inputs)
-
-            outputs = F.softmax(outputs, dim=1)
-            pred_1 = torch.argmax(outputs, dim=1)
-
-            c = criterion(F.softmax(outputs,dim=0), labels.to(device))
-            acc = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
-            # print_gpu_utilization()
-            c_accum.append(c.item())
-            acc_accum.append(acc)
-            c.backward()
-            resnet_optimizer.step()
-            print('Epoch: {}, Batch: {}, Cost: {:.3f}, PG:{:d}, Acc: {:.3f}, Accbf: {:d}, Tau: {:d}'.format(
-                    epoch, i, c.item(), int(1), np.mean(acc),
-                    int(1), int(1)))
-
-
-    # torch.cuda.synchronize()
-    # print elpased time
-    elapsed_time = datetime.now() - time
-    print('Elapsed time: ', elapsed_time, 'minutes')
-
-
-
-def main_prev():
     # get args
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
@@ -447,177 +429,40 @@ def main_prev():
     condnet_max_prob = args.condnet_max_prob
     compact = args.compact
 
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    ])
-
-    from datasets import load_from_disk
+    checkpoint_callback = ModelCheckpoint(
+        monitor='val_loss',
+        filename='resnet-{epoch:02d}-{val_loss:.2f}',
+        save_top_k=3,
+        mode='min',
+    )
+    early_stopping = EarlyStopping(monitor='val_loss', patience=3)
 
     time = datetime.now()
-
-    train_dataset = load_from_disk('D:/imagenet-1k/train')
-    val_dataset = load_from_disk('D:/imagenet-1k/validation')
-
-    # 데이터로더 생성
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=12, pin_memory=True,
-                              prefetch_factor=2, persistent_workers=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=12,
-                            pin_memory=True, prefetch_factor=2, persistent_workers=True)
+    dir2save = '/Users/dongjaekim/Documents/imagenet'
+    train_dataset = ImageNetDataModule(dir2save, batch_size=BATCH_SIZE)
 
     elapsed_time = datetime.now() - time
-    print('Data loading time: ', elapsed_time/60,'minutes')
+    print('Data loading time: ', elapsed_time,'minutes')
 
-    resnet = ResNet50()
-    resnet = resnet.to(device)
+    resnet = ResNet50().to(device)
     for param in resnet.parameters():
         param.requires_grad = True
+    model = ResNetModule(args, resnet)
 
-    resnet_model = ResNet50()
-    resnet_model = resnet_model.to(device)
-    gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, hidden_size=args.hidden_size).to(device)
-    adj_, num_channels_ls = adj(resnet_model)
+    trainer = pl.Trainer(
+        max_epochs=10,
+        callbacks=[checkpoint_callback, early_stopping]
+    )
 
-    criterion = nn.CrossEntropyLoss()
-    resnet_optimizer = optim.SGD(resnet_model.parameters(), lr=learning_rate,
-                              momentum=0.9, weight_decay=lambda_l2)
-    policy_optimizer = optim.SGD(gnn_policy.parameters(), lr=learning_rate,
-                                 momentum=0.9, weight_decay=lambda_l2)
+    #torch sync
+    time= datetime.now()
 
-    num_params = 0
-    for param in gnn_policy.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
+    trainer.fit(model, train_dataset)
 
-    num_params = 0
-    for param in resnet_model.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
+    # print elpased time
+    elapsed_time = datetime.now() - time
+    print('Elapsed time: ', elapsed_time, 'minutes')
 
-    resnet_surrogate = ResNet50().to(device)
-    # copy weights in mlp to mlp_surrogate
-    resnet_surrogate.load_state_dict(resnet_model.state_dict())
-
-    # run for 50 epochs
-    for epoch in range(max_epochs):
-        bn = 0
-        costs = 0
-        accs = 0
-        accsbf = 0
-        PGs = 0
-        num_iteration = 0
-        taus = 0
-        Ls = 0
-        gnn_policy.train()
-        resnet_model.train()
-
-        resnet_optimizer.zero_grad()
-        policy_optimizer.zero_grad()
-
-        L_accum = []
-        c_accum = []
-        PG_accum = []
-        acc_accum = []
-        accbf_accum = []
-        tau_accum = []
-
-
-        for i, data in enumerate(train_loader, start=0):
-
-            if args.compact:
-                if i > 50:
-                    break
-
-            bn += 1
-
-            resnet_surrogate.eval()
-
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
-
-            outputs_surrogate, hs = resnet_surrogate(inputs)
-
-            us, p = gnn_policy(hs, adj_)  # run gnn
-            outputs, hs = resnet_model(inputs, cond_drop=True, us=us.detach(), channels=num_channels_ls)
-
-            # make labels one hot vector
-            y_one_hot = torch.zeros(labels.shape[0], 1000)
-            y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
-            # y_one_hot = torch.zeros((2, 1000), device=device)
-            # y_one_hot[torch.arange(labels.shape[0], device=device), labels] = 1
-            c = criterion( F.softmax(outputs, dim=1), labels.to(device))
-            # Compute the regularization loss L
-
-            L = c + lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean() +
-                                torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean())
-
-            L += lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
-                                    p.squeeze().var(axis=1).mean())
-
-            # Compute the policy gradient (PG) loss
-            logp = torch.log(p.squeeze()).sum(axis=1).mean()
-            PG = lambda_pg * c * (-logp) + L
-
-            # calculate accuracy
-            pred = torch.argmax(outputs, dim=1)
-            pred = pred.to(device)
-            acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
-            pred_1 = torch.argmax(outputs_surrogate, dim=1)
-            accbf = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
-
-            tau_ = us.mean().detach().item()
-            L_accum.append(L.item())
-            c_accum.append(c.item())
-            PG_accum.append(PG.item())
-            acc_accum.append(acc)
-            accbf_accum.append(accbf)
-            tau_accum.append(tau_)
-
-            PG /= args.accum_step
-            PG.backward()
-
-            if (i+1) % args.accum_step ==0 or ((i+1)==len(train_loader)):
-                resnet_optimizer.step()
-                policy_optimizer.step()
-
-                # addup loss and acc
-                costs += np.sum(c_accum)
-                accs += np.mean(acc_accum)
-                accsbf += np.mean(accbf_accum)
-                PGs += np.sum(PG_accum)
-                Ls += np.sum(L_accum)
-
-                # surrogate
-                resnet_surrogate.load_state_dict(resnet_model.state_dict())
-
-                taus += np.mean(tau_accum)
-
-                # print PG.item(), and acc with name
-                # print(
-                    # 'Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(epoch, i,
-                    #                                                                                                c.item(),
-                    #                                                                                                PG.item(),
-                    #                                                                                                acc,
-                    #                                                                                                accbf,
-                    #                                                                                                tau_))
-                print(
-                    'Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(epoch, i, np.sum(c_accum)/args.accum_step, np.sum(PG_accum)/args.accum_step, np.mean(acc_accum), np.mean(accbf_accum), np.mean(tau_accum)))
-
-
-                resnet_optimizer.zero_grad()
-                policy_optimizer.zero_grad()
-
-                L_accum = []
-                c_accum = []
-                PG_accum = []
-                acc_accum = []
-                accbf_accum = []
-                tau_accum = []
-
-
-        # print epoch and epochs costs and accs
-        print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
 
 if __name__=='__main__':
     main()
