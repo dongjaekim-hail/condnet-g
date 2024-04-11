@@ -392,7 +392,7 @@ def main():
 
             c = criterion(F.softmax(outputs,dim=0), labels.to(device))
             acc = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
-            print_gpu_utilization()
+            # print_gpu_utilization()
             c_accum.append(c.item())
             acc_accum.append(acc)
             c.backward()
