@@ -14,7 +14,7 @@ import wandb
 from transformers import Trainer, EarlyStoppingCallback, TrainingArguments
 from pynvml import *
 from datasets import load_from_disk
-
+from tqdm import tqdm
 # wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
 # wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -303,7 +303,7 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.001)
-    args.add_argument('--BATCH_SIZE', type=int, default=8)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args.add_argument('--accum-step', type=int, default=8)
@@ -323,10 +323,10 @@ def main():
 
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
+        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to RGB
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
-
 
     time = datetime.now()
     train_dataset = ImagenetDataset('D:/imagenet-1k/train', transform=transform)
@@ -354,7 +354,7 @@ def main():
     time= datetime.now()
 
     # run for 50 epochs
-    for epoch in range(5):
+    for epoch in range(1):
         bn = 0
         costs = 0
         accs = 0
@@ -374,7 +374,7 @@ def main():
         tau_accum = []
 
 
-        for i, data in enumerate(train_loader, start=0):
+        for i, data in enumerate(tqdm(train_loader), start=0):
             resnet_optimizer.zero_grad()
 
             if args.compact:
@@ -387,8 +387,7 @@ def main():
 
             outputs, hs = resnet(inputs)
 
-            y_one_hot = torch.zeros(labels.shape[0], 1000)
-            y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
+            outputs = F.softmax(outputs, dim=1)
             pred_1 = torch.argmax(outputs, dim=1)
 
             c = criterion(F.softmax(outputs,dim=0), labels.to(device))
@@ -398,9 +397,9 @@ def main():
             acc_accum.append(acc)
             c.backward()
             resnet_optimizer.step()
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Accbf: {:.3f}, Tau: {:.3f}'.format(
-                    epoch, i, np.sum(c_accum)/args.accum_step, np.sum(PG_accum)/args.accum_step, np.mean(acc_accum),
-                    np.mean(accbf_accum), np.mean(tau_accum)))
+            print('Epoch: {}, Batch: {}, Cost: {:.3f}, PG:{:d}, Acc: {:.3f}, Accbf: {:d}, Tau: {:d}'.format(
+                    epoch, i, c.item(), int(1), np.mean(acc),
+                    int(1), int(1)))
 
 
     torch.cuda.synchronize()
