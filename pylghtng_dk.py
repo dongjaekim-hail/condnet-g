@@ -25,6 +25,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'cpu'
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.benchmark=True
+torch.set_float32_matmul_precision("medium")
+
 
 class CondNetModule(pl.LightningModule):
     def __init__(self, args, resnet_model, gnn_policy, adj_, num_channels_ls):
@@ -451,7 +453,11 @@ def main():
 
     trainer = pl.Trainer(
         max_epochs=10,
-        callbacks=[checkpoint_callback, early_stopping]
+        callbacks=[checkpoint_callback, early_stopping],
+        accelerator='gpu',
+        precision= 16,
+        check_val_every_n_epoch=1
+
     )
 
     #torch sync
