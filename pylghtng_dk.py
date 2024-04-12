@@ -80,20 +80,24 @@ class ResNetModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
-        outputs = self.forward(inputs)
-        loss = self.criterion(F.log_softmax(outputs, dim=1), labels)
+        outputs, _ = self.forward(inputs)
+        preds = F.log_softmax(outputs, dim=1)
+        loss = self.criterion(preds, labels)
+        train_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
         # 손실, 로그 및 기타 값의 반환은 여기서 처리합니다.
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_acc', train_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
-        outputs = self.forward(inputs)
-        loss = self.criterion(F.log_softmax(outputs, dim=1), labels)
-        val_acc = accuracy(torch.argmax(loss, dim=1), labels)
-        self.log('val_loss', loss, prog_bar=True)
-        self.log('val_acc', val_acc, prog_bar=True)
+        outputs, _ = self.forward(inputs)
+        preds = F.log_softmax(outputs, dim=1)
+        loss = self.criterion(preds, labels)
+        val_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
+        self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_acc', val_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         # 옵티마이저와 스케줄러
@@ -413,7 +417,7 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.001)
-    args.add_argument('--BATCH_SIZE', type=int, default=8)
+    args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args.add_argument('--accum-step', type=int, default=8)
@@ -441,6 +445,7 @@ def main():
 
     time = datetime.now()
     dir2save = '/Users/dongjaekim/Documents/imagenet'
+    dir2save = 'D:/imagenet-1k/'
     train_dataset = ImageNetDataModule(dir2save, batch_size=BATCH_SIZE)
 
     elapsed_time = datetime.now() - time
@@ -455,7 +460,7 @@ def main():
         max_epochs=10,
         callbacks=[checkpoint_callback, early_stopping],
         accelerator='gpu',
-        precision= 16,
+        precision= '16-mixed',
         check_val_every_n_epoch=1
 
     )
