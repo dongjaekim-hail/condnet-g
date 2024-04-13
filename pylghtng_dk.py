@@ -414,10 +414,10 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=100)
+    args.add_argument('--BATCH_SIZE', type=int, default=250)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=8)
+    args.add_argument('--accum-step', type=int, default=4)
     # parameters related to pytorch_lightning
     args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--benchmark', type=bool, default=True)
@@ -478,7 +478,8 @@ def main():
         accelerator='gpu',
         precision= args.precision,
         check_val_every_n_epoch=1,
-        logger=logger
+        logger=logger,
+        accumulate_grad_batches=args.accum_step,
     )
 
     #torch sync
