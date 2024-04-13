@@ -18,15 +18,7 @@ from tqdm import tqdm
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from torchmetrics.functional import accuracy
-
-# wandb.init(project="condgnet",entity='hails', name='resnet50_imagenet')
-# wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-# device = 'cpu'
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.benchmark=True
-torch.set_float32_matmul_precision("medium")
-
+from pytorch_lightning.loggers import WandbLogger
 
 class CondNetModule(pl.LightningModule):
     def __init__(self, args, resnet_model, gnn_policy, adj_, num_channels_ls):
@@ -405,6 +397,9 @@ def main():
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
     import argparse
     args = argparse.ArgumentParser()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
     args.add_argument('--nlayers', type=int, default=3)
     args.add_argument('--lambda_s', type=float, default=7)
     args.add_argument('--lambda_v', type=float, default=1.2)
@@ -421,19 +416,21 @@ def main():
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args.add_argument('--accum-step', type=int, default=8)
+    # parameters related to pytorch_lightning
+    args.add_argument('--allow_tf32', type=bool, default=True)
+    args.add_argument('--benchmark', type=bool, default=True)
+    args.add_argument('--precision', type=str, default='16-mixed')
+    args.add_argument('--accelerator', type=str, default=device)
+    args.add_argument('--matmul_precision', type=str, default='medium')
     args = args.parse_args()
 
-    lambda_s = args.lambda_s
-    lambda_v = args.lambda_v
-    lambda_l2 = args.lambda_l2
-    lambda_pg = args.lambda_pg
-    tau = args.tau
-    learning_rate = args.learning_rate
-    max_epochs = args.max_epochs
-    BATCH_SIZE = args.BATCH_SIZE
-    condnet_min_prob = args.condnet_min_prob
-    condnet_max_prob = args.condnet_max_prob
-    compact = args.compact
+    # device = 'cpu'
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+    torch.set_float32_matmul_precision("medium") # high
+
+    logger = WandbLogger(project="CONDG_RVS", entity='hails', name='resnet50_imagenet',
+                         config=args.__dict__, log_model='all')
 
     checkpoint_callback = ModelCheckpoint(
         monitor='val_loss',
@@ -446,7 +443,7 @@ def main():
     time = datetime.now()
     dir2save = '/Users/dongjaekim/Documents/imagenet'
     dir2save = 'D:/imagenet-1k/'
-    train_dataset = ImageNetDataModule(dir2save, batch_size=BATCH_SIZE)
+    train_dataset = ImageNetDataModule(dir2save, batch_size=args.BATCH_SIZE)
 
     elapsed_time = datetime.now() - time
     print('Data loading time: ', elapsed_time,'minutes')
@@ -461,8 +458,8 @@ def main():
         callbacks=[checkpoint_callback, early_stopping],
         accelerator='gpu',
         precision= '16-mixed',
-        check_val_every_n_epoch=1
-
+        check_val_every_n_epoch=1,
+        logger=logger
     )
 
     #torch sync
