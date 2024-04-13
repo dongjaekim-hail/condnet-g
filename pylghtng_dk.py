@@ -416,16 +416,17 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=10)
+    args.add_argument('--BATCH_SIZE', type=int, default=250)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=1)
+    args.add_argument('--accum-step', type=int, default=4)
     # parameters related to pytorch_lightning
     args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--benchmark', type=bool, default=True)
     args.add_argument('--precision', type=str, default='16-mixed') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='medium')
+    args.add_argument('--debug', type=bool, default=True)
     args = args.parse_args()
 
     # device = 'cpu'
@@ -437,13 +438,13 @@ def main():
         torch.backends.cudnn.benchmark = True
     else:
         torch.backends.cudnn.benchmark = False
-    if args.precision == 'bf16':
-        torch.set_default_dtype(torch.bfloat16)
-    elif args.precision == '32':
-        torch.set_default_dtype(torch.float32)
-    elif args.precision == '16-mixed':
-        torch.set_default_dtype(torch.float16)
-    else:
+    # if args.precision == 'bf16':
+    #     torch.set_default_dtype(torch.bfloat16)
+    # elif args.precision == '32':
+    #     torch.set_default_dtype(torch.float32)
+    # elif args.precision == '16-mixed':
+    #     torch.set_default_dtype(torch.float16)
+    # else:
         raise ValueError('Invalid precision')
     if args.matmul_precision == 'medium':
         torch.set_float32_matmul_precision("medium") # high
@@ -463,8 +464,8 @@ def main():
 
     time = datetime.now()
     dir2save = '/Users/dongjaekim/Documents/imagenet'
-    dir2save = 'E:/imagenet-1k/'
-    train_dataset = ImageNetDataModule(dir2save, batch_size=args.BATCH_SIZE)
+    dir2save = 'D:/imagenet-1k/'
+    train_dataset = ImageNetDataModule(dir2save, batch_size=args.BATCH_SIZE, debug=args.debug)
 
     elapsed_time = datetime.now() - time
     print('Data loading time: ', elapsed_time,'minutes')
