@@ -63,11 +63,10 @@ class ResNetModule(pl.LightningModule):
         self.resnet_model = resnet_model
         self.criterion = torch.nn.CrossEntropyLoss()
 
-        # PyTorch Lightning에서는 모델 또는 옵티마이저에 대한 모든 설정을 `self`에 저장해야 합니다.
         self.save_hyperparameters()
 
     def forward(self, inputs):
-        # 모델의 순전파 로직을 여기에 정의합니다.
+
         return self.resnet_model(inputs)
 
     def training_step(self, batch, batch_idx):
@@ -76,7 +75,7 @@ class ResNetModule(pl.LightningModule):
         preds = F.log_softmax(outputs, dim=1)
         loss = self.criterion(preds, labels)
         train_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
-        # 손실, 로그 및 기타 값의 반환은 여기서 처리합니다.
+
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log('train_acc', train_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
@@ -90,8 +89,6 @@ class ResNetModule(pl.LightningModule):
         val_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log('val_acc', val_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        if 1:
-            EscapeEscape
 
     def configure_optimizers(self):
         # 옵티마이저와 스케줄러
@@ -350,7 +347,7 @@ class Gnn(nn.Module):
 
         return u, p
 class ImageNetDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir: str = './data', batch_size: int = 32):
+    def __init__(self, data_dir: str = './data', batch_size: int = 32, debug: bool = False):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -363,6 +360,7 @@ class ImageNetDataModule(pl.LightningDataModule):
         ])
 
         self.transform = transform
+        self.debug = debug
     def __len__(self):
         return len(self.train_dataset)
     def __getitem__(self, idx):
@@ -387,7 +385,10 @@ class ImageNetDataModule(pl.LightningDataModule):
                 if self.transform:
                     image = self.transform(image)
                 return image, label
-        self.train_dataset = ImagenetDataset(os.path.join(self.data_dir, 'train'), transform=self.transform)
+        if self.debug:
+            self.train_dataset = ImagenetDataset(os.path.join(self.data_dir, 'validation'), transform=self.transform)
+        else:
+            self.train_dataset = ImagenetDataset(os.path.join(self.data_dir, 'train'), transform=self.transform)
         self.val_dataset =  ImagenetDataset(os.path.join(self.data_dir, 'validation'), transform=self.transform)
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
@@ -415,10 +416,10 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=250)
+    args.add_argument('--BATCH_SIZE', type=int, default=10)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=4)
+    args.add_argument('--accum-step', type=int, default=1)
     # parameters related to pytorch_lightning
     args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--benchmark', type=bool, default=True)
@@ -462,7 +463,7 @@ def main():
 
     time = datetime.now()
     dir2save = '/Users/dongjaekim/Documents/imagenet'
-    dir2save = 'D:/imagenet-1k/'
+    dir2save = 'E:/imagenet-1k/'
     train_dataset = ImageNetDataModule(dir2save, batch_size=args.BATCH_SIZE)
 
     elapsed_time = datetime.now() - time
@@ -485,6 +486,8 @@ def main():
 
     #torch sync
     time= datetime.now()
+
+    logger.watch(model, log='all')
 
     trainer.fit(model, train_dataset)
 
