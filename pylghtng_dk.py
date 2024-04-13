@@ -416,10 +416,10 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=250)
+    args.add_argument('--BATCH_SIZE', type=int, default=50)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=4)
+    args.add_argument('--accum-step', type=int, default=1)
     # parameters related to pytorch_lightning
     args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--benchmark', type=bool, default=True)
@@ -464,7 +464,7 @@ def main():
 
     time = datetime.now()
     dir2save = '/Users/dongjaekim/Documents/imagenet'
-    dir2save = 'D:/imagenet-1k/'
+    dir2save = 'E:/imagenet-1k/'
     train_dataset = ImageNetDataModule(dir2save, batch_size=args.BATCH_SIZE, debug=args.debug)
 
     elapsed_time = datetime.now() - time
@@ -495,7 +495,8 @@ def main():
     # print elpased time
     elapsed_time = datetime.now() - time
     print('Elapsed time: ', elapsed_time, 'minutes')
-
+    wandb.log({'elapsed_time': elapsed_time.seconds})
+    wandb.finish()
 
 if __name__=='__main__':
     main()
