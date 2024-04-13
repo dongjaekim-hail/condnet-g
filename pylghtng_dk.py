@@ -416,7 +416,7 @@ def main():
     # args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
-    args.add_argument('--learning_rate', type=float, default=0.001)
+    args.add_argument('--learning_rate', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
