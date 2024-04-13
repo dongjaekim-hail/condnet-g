@@ -90,6 +90,8 @@ class ResNetModule(pl.LightningModule):
         val_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log('val_acc', val_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        if 1:
+            EscapeEscape
 
     def configure_optimizers(self):
         # 옵티마이저와 스케줄러
@@ -412,22 +414,39 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=100)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args.add_argument('--accum-step', type=int, default=8)
     # parameters related to pytorch_lightning
     args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--benchmark', type=bool, default=True)
-    args.add_argument('--precision', type=str, default='16-mixed')
+    args.add_argument('--precision', type=str, default='16-mixed') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='medium')
     args = args.parse_args()
 
     # device = 'cpu'
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.benchmark = True
-    torch.set_float32_matmul_precision("medium") # high
+    if args.allow_tf32:
+        torch.backends.cuda.matmul.allow_tf32 = True
+    else:
+        torch.backends.cuda.matmul.allow_tf32 = False
+    if args.benchmark:
+        torch.backends.cudnn.benchmark = True
+    else:
+        torch.backends.cudnn.benchmark = False
+    if args.precision == 'bf16':
+        torch.set_default_dtype(torch.bfloat16)
+    elif args.precision == '32':
+        torch.set_default_dtype(torch.float32)
+    elif args.precision == '16-mixed':
+        torch.set_default_dtype(torch.float16)
+    else:
+        raise ValueError('Invalid precision')
+    if args.matmul_precision == 'medium':
+        torch.set_float32_matmul_precision("medium") # high
+    elif args.matmul_precision == 'high':
+        torch.set_float32_matmul_precision("high")
 
     logger = WandbLogger(project="CONDG_RVS", entity='hails', name='resnet50_imagenet',
                          config=args.__dict__, log_model='all')
@@ -454,10 +473,10 @@ def main():
     model = ResNetModule(args, resnet)
 
     trainer = pl.Trainer(
-        max_epochs=10,
+        max_epochs=1,
         callbacks=[checkpoint_callback, early_stopping],
         accelerator='gpu',
-        precision= '16-mixed',
+        precision= args.precision,
         check_val_every_n_epoch=1,
         logger=logger
     )
