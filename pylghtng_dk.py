@@ -111,7 +111,7 @@ def print_summary(result):
     print_gpu_utilization()
 
 class ResNet50(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super(ResNet50, self).__init__()
         resnet_model = models.resnet50(pretrained=True)
         self.modules = list(resnet_model.children())
@@ -126,14 +126,15 @@ class ResNet50(torch.nn.Module):
         self.layer4 = self.modules[7]
         self.avg_pool = self.modules[8]
         self.fc = self.modules[9]
+        self.device = device
 
     def forward(self, x, cond_drop=False, us=None, channels=None):
-        hs = [torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device)]
+        hs = [torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(self.device)]
         if not cond_drop:
             x = self.conv1(x)
             x = self.bn1(x)
             x = self.relu(x)
-            hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(device))
+            hs.append(torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(self.device))
             x = self.max_pool(x)
             # for layer in [self.conv1, self.bn1, self.relu, self.max_pool]:
             #     x = layer(x)
@@ -146,18 +147,18 @@ class ResNet50(torch.nn.Module):
                     out = bottleneck.conv1(x)
                     out = bottleneck.bn1(out)
                     out = bottleneck.relu(out)
-                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
+                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(self.device))
                     out = bottleneck.conv2(out)
                     out = bottleneck.bn2(out)
                     out = bottleneck.relu(out)
-                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
+                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(self.device))
                     out = bottleneck.conv3(out)
                     out = bottleneck.bn3(out)
                     if bottleneck.downsample is not None:
                         residual = bottleneck.downsample(x)
                     out += residual
                     out = bottleneck.relu(out)
-                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(device))
+                    hs.append(torch.flatten(F.interpolate(out, size=(7, 7)), 2).to(self.device))
                     x = out
                 count+=1
             x = self.avg_pool(x)
@@ -467,7 +468,7 @@ def main():
     elapsed_time = datetime.now() - time
     print('Data loading time: ', elapsed_time,'minutes')
 
-    resnet = ResNet50().to(device)
+    resnet = ResNet50(device).to(device)
     for param in resnet.parameters():
         param.requires_grad = True
     model = ResNetModule(args, resnet)
