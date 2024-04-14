@@ -13,9 +13,9 @@ def download_imagenet(dir2save):
 
 
 if __name__ == '__main__':
-    dir2save = 'D:/imagenet-1k'
-    dir2save = '/Users/dongjaekim/Documents/imagenet'
-    dataset = load_dataset('imagenet-1k',num_proc=4)
+    dir2save = 'E:/imagenet-1k'
+    # dir2save = '/Users/dongjaekim/Documents/imagenet'
+    dataset = load_dataset('imagenet-1k',num_proc=8)
     dataset.save_to_disk(dir2save, num_proc=12)
     # dataset_train = load_dataset('imagenet-1k', data_dir=dir2save, split='train', num_proc=8)
     print('')

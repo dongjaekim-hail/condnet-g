@@ -417,17 +417,29 @@ def main():
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=50)
-    args.add_argument('--compact', type=bool, default=False)
+    # args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args.add_argument('--accum-step', type=int, default=1)
     # parameters related to pytorch_lightning
-    args.add_argument('--allow_tf32', type=bool, default=True)
-    args.add_argument('--benchmark', type=bool, default=True)
+    # args.add_argument('--allow_tf32', type=bool, default=True)
+    args.add_argument('--allow_tf32', type=int, default=1)
+    # args.add_argument('--benchmark', type=bool, default=True)
+    args.add_argument('--benchmark', type=int, default=1)
     args.add_argument('--precision', type=str, default='16-mixed') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='medium')
     args.add_argument('--debug', type=bool, default=True)
     args = args.parse_args()
+
+    if args.allow_tf32 == 1:
+        args.allow_tf32 = True
+    else:
+        args.allow_tf32 = False
+
+    if args.benchmark == 1:
+        args.benchmark = True
+    else:
+        args.benchmark = False
 
     # device = 'cpu'
     if args.allow_tf32:
@@ -445,7 +457,7 @@ def main():
     # elif args.precision == '16-mixed':
     #     torch.set_default_dtype(torch.float16)
     # else:
-        raise ValueError('Invalid precision')
+    #     raise ValueError('Invalid precision')
     if args.matmul_precision == 'medium':
         torch.set_float32_matmul_precision("medium") # high
     elif args.matmul_precision == 'high':
