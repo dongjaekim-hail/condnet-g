@@ -303,10 +303,10 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.001)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=50)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=8)
+    args.add_argument('--accum-step', type=int, default=1)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -330,7 +330,7 @@ def main():
 
     time = datetime.now()
     dir2save = 'D:/imagenet-1k/'
-    dir2save = '/Users/dongjaekim/Documents/imagenet'
+    # dir2save = '/Users/dongjaekim/Documents/imagenet'
     train_dataset = ImagenetDataset(os.path.join(dir2save, 'train'), transform=transform)
     val_dataset = ImagenetDataset(os.path.join(dir2save, 'validation'), transform=transform)
 
@@ -392,7 +392,7 @@ def main():
             outputs = F.softmax(outputs, dim=1)
             pred_1 = torch.argmax(outputs, dim=1)
 
-            c = criterion(F.softmax(outputs,dim=0), labels.to(device))
+            c = criterion(outputs, labels.to(device))
             acc = torch.sum(pred_1 == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
             # print_gpu_utilization()
             c_accum.append(c.item())

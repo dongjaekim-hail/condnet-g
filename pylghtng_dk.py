@@ -62,18 +62,19 @@ class ResNetModule(pl.LightningModule):
         self.args = args
         self.resnet_model = resnet_model
         self.criterion = torch.nn.CrossEntropyLoss()
+        # self.automatic_optimization = False
 
         self.save_hyperparameters()
 
     def forward(self, inputs):
-
         return self.resnet_model(inputs)
 
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs, _ = self.forward(inputs)
-        preds = F.log_softmax(outputs, dim=1)
-        loss = self.criterion(preds, labels)
+        preds = F.softmax(outputs, dim=1)
+        # loss = self.criterion(preds, labels)
+        loss = F.cross_entropy(preds, labels)
         train_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -84,7 +85,7 @@ class ResNetModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs, _ = self.forward(inputs)
-        preds = F.log_softmax(outputs, dim=1)
+        preds = F.softmax(outputs, dim=1)
         loss = self.criterion(preds, labels)
         val_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -416,18 +417,18 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=50)
+    args.add_argument('--BATCH_SIZE', type=int, default=100)
     # args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args.add_argument('--accum-step', type=int, default=1)
     # parameters related to pytorch_lightning
     # args.add_argument('--allow_tf32', type=bool, default=True)
-    args.add_argument('--allow_tf32', type=int, default=1)
+    args.add_argument('--allow_tf32', type=int, default=0)
     # args.add_argument('--benchmark', type=bool, default=True)
-    args.add_argument('--benchmark', type=int, default=1)
-    args.add_argument('--precision', type=str, default='16-mixed') # 'bf16', '32'
+    args.add_argument('--benchmark', type=int, default=0)
+    args.add_argument('--precision', type=str, default='32') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
-    args.add_argument('--matmul_precision', type=str, default='medium')
+    args.add_argument('--matmul_precision', type=str, default='high')
     args.add_argument('--debug', type=bool, default=True)
     args = args.parse_args()
 
@@ -464,19 +465,20 @@ def main():
         torch.set_float32_matmul_precision("high")
 
     logger = WandbLogger(project="CONDG_RVS", entity='hails', name='resnet50_imagenet',
-                         config=args.__dict__, log_model='all')
+                            config=args.__dict__)
+                         # config=args.__dict__, log_model='all')
 
     checkpoint_callback = ModelCheckpoint(
         monitor='val_loss',
         filename='resnet-{epoch:02d}-{val_loss:.2f}',
-        save_top_k=3,
+        save_top_k=100,
         mode='min',
     )
-    early_stopping = EarlyStopping(monitor='val_loss', patience=3)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=100)
 
     time = datetime.now()
     dir2save = '/Users/dongjaekim/Documents/imagenet'
-    dir2save = 'E:/imagenet-1k/'
+    dir2save = 'D:/imagenet-1k/'
     train_dataset = ImageNetDataModule(dir2save, batch_size=args.BATCH_SIZE, debug=args.debug)
 
     elapsed_time = datetime.now() - time
@@ -488,7 +490,7 @@ def main():
     model = ResNetModule(args, resnet)
 
     trainer = pl.Trainer(
-        max_epochs=1,
+        max_epochs=100,
         callbacks=[checkpoint_callback, early_stopping],
         accelerator='gpu',
         precision= args.precision,
@@ -500,7 +502,8 @@ def main():
     #torch sync
     time= datetime.now()
 
-    logger.watch(model, log='all')
+    # logger.watch(model, log='all')
+    logger.watch(model, log_graph=False)
 
     trainer.fit(model, train_dataset)
 
