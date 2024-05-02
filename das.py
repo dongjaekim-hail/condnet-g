@@ -17,5 +17,5 @@ for ii in range(len(l_batch_size)):
             for precision in l_precision:
                 for matmul_precision in l_matmul_precision:
                     print(f"batch_size: {batch_size}, accum_steps: {accum_steps}, allow_tf32: {allow_tf32}, benchmark: {benchmark}, precision: {precision}, matmul_precision: {matmul_precision}")
-                    os.system(f"python main.py --BATCH_SIZE {batch_size} --accum-step {accum_steps} --allow_tf32 {allow_tf32} --benchmark {benchmark} --precision {precision} --matmul_precision {matmul_precision}")
+                    os.system(f"python main_resnet.py --BATCH_SIZE {batch_size} --accum-step {accum_steps} --allow_tf32 {allow_tf32} --benchmark {benchmark} --precision {precision} --matmul_precision {matmul_precision}")
 
