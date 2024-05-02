@@ -99,6 +99,8 @@ class ImagenetDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, label
+
+
 class Classifier(nn.Module):
     def __init__(self):
         super().__init__()
