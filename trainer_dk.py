@@ -461,7 +461,7 @@ def main_prev():
     val_dataset = load_from_disk('D:/imagenet-1k/validation')
 
     # 데이터로더 생성
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=12, pin_memory=True,
+    train_loader = DataLoader(val_datasets, batch_size=BATCH_SIZE, shuffle=True, num_workers=12, pin_memory=True,
                               prefetch_factor=2, persistent_workers=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=12,
                             pin_memory=True, prefetch_factor=2, persistent_workers=True)

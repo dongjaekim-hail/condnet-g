@@ -15,12 +15,12 @@ from transformers import Trainer, EarlyStoppingCallback, TrainingArguments
 from pynvml import *
 from datasets import load_from_disk
 from tqdm import tqdm
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+import lightning as L
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from torchmetrics.functional import accuracy
-from pytorch_lightning.loggers import WandbLogger
+from lightning.pytorch.loggers import WandbLogger
 
-class CondNetModule(pl.LightningModule):
+class CondNetModule(L.LightningModule):
     def __init__(self, args, resnet_model, gnn_policy, adj_, num_channels_ls):
         super().__init__()
         self.args = args
@@ -56,15 +56,13 @@ class CondNetModule(pl.LightningModule):
                                            weight_decay=self.args.lambda_l2)
         return [resnet_optimizer, policy_optimizer], []
 
-class ResNetModule(pl.LightningModule):
+class ResNetModule(L.LightningModule):
     def __init__(self, args, resnet_model):
         super().__init__()
         self.args = args
         self.resnet_model = resnet_model
-        self.criterion = torch.nn.CrossEntropyLoss()
         # self.automatic_optimization = False
-
-        self.save_hyperparameters()
+        # self.save_hyperparameters()
 
     def forward(self, inputs):
         return self.resnet_model(inputs)
@@ -86,32 +84,21 @@ class ResNetModule(pl.LightningModule):
         inputs, labels = batch
         outputs, _ = self.forward(inputs)
         preds = F.softmax(outputs, dim=1)
-        loss = self.criterion(preds, labels)
+        loss = F.cross_entropy(preds, labels)
         val_acc = accuracy(torch.argmax(preds, dim=1), labels, task='multiclass', num_classes=1000)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log('val_acc', val_acc, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         # 옵티마이저와 스케줄러
-        resnet_optimizer = torch.optim.Adam(self.resnet_model.parameters(), lr=self.args.learning_rate,
+        resnet_optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate,
                                            weight_decay=self.args.lambda_l2)
         return resnet_optimizer
-
-
-def print_gpu_utilization():
-    nvmlInit()
-    handle = nvmlDeviceGetHandleByIndex(0)
-    info = nvmlDeviceGetMemoryInfo(handle)
-    print(f"GPU memory occupied: {info.used//1024**2} MB.")
-def print_summary(result):
-    print(f"Time: {result.metrics['train_runtime']:.2f}")
-    print(f"Samples/second: {result.metrics['train_samples_per_second']:.2f}")
-    print_gpu_utilization()
 
 class ResNet50(torch.nn.Module):
     def __init__(self, device):
         super(ResNet50, self).__init__()
-        resnet_model = models.resnet50(pretrained=True)
+        resnet_model = models.resnet50(pretrained=False)
         self.modules = list(resnet_model.children())
         self.len_modules = len(self.modules)
         self.conv1 = self.modules[0]
@@ -347,7 +334,7 @@ class Gnn(nn.Module):
         u = torch.bernoulli(p).to(device)
 
         return u, p
-class ImageNetDataModule(pl.LightningDataModule):
+class ImageNetDataModule(L.LightningDataModule):
     def __init__(self, data_dir: str = './data', batch_size: int = 32, debug: bool = False):
         super().__init__()
         self.data_dir = data_dir
@@ -416,7 +403,7 @@ def main():
     # args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
-    args.add_argument('--learning_rate', type=float, default=0.1)
+    args.add_argument('--learning_rate', type=float, default=1e-2)
     args.add_argument('--BATCH_SIZE', type=int, default=100)
     # args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
@@ -432,37 +419,37 @@ def main():
     args.add_argument('--debug', type=bool, default=True)
     args = args.parse_args()
 
-    if args.allow_tf32 == 1:
-        args.allow_tf32 = True
-    else:
-        args.allow_tf32 = False
-
-    if args.benchmark == 1:
-        args.benchmark = True
-    else:
-        args.benchmark = False
-
-    # device = 'cpu'
-    if args.allow_tf32:
-        torch.backends.cuda.matmul.allow_tf32 = True
-    else:
-        torch.backends.cuda.matmul.allow_tf32 = False
-    if args.benchmark:
-        torch.backends.cudnn.benchmark = True
-    else:
-        torch.backends.cudnn.benchmark = False
-    # if args.precision == 'bf16':
-    #     torch.set_default_dtype(torch.bfloat16)
-    # elif args.precision == '32':
-    #     torch.set_default_dtype(torch.float32)
-    # elif args.precision == '16-mixed':
-    #     torch.set_default_dtype(torch.float16)
+    # if args.allow_tf32 == 1:
+    #     args.allow_tf32 = True
     # else:
-    #     raise ValueError('Invalid precision')
-    if args.matmul_precision == 'medium':
-        torch.set_float32_matmul_precision("medium") # high
-    elif args.matmul_precision == 'high':
-        torch.set_float32_matmul_precision("high")
+    #     args.allow_tf32 = False
+    #
+    # if args.benchmark == 1:
+    #     args.benchmark = True
+    # else:
+    #     args.benchmark = False
+    #
+    # # device = 'cpu'
+    # if args.allow_tf32:
+    #     torch.backends.cuda.matmul.allow_tf32 = True
+    # else:
+    #     torch.backends.cuda.matmul.allow_tf32 = False
+    # if args.benchmark:
+    #     torch.backends.cudnn.benchmark = True
+    # else:
+    #     torch.backends.cudnn.benchmark = False
+    # # if args.precision == 'bf16':
+    # #     torch.set_default_dtype(torch.bfloat16)
+    # # elif args.precision == '32':
+    # #     torch.set_default_dtype(torch.float32)
+    # # elif args.precision == '16-mixed':
+    # #     torch.set_default_dtype(torch.float16)
+    # # else:
+    # #     raise ValueError('Invalid precision')
+    # if args.matmul_precision == 'medium':
+    #     torch.set_float32_matmul_precision("medium") # high
+    # elif args.matmul_precision == 'high':
+    #     torch.set_float32_matmul_precision("high")
 
     logger = WandbLogger(project="CONDG_RVS", entity='hails', name='resnet50_imagenet',
                             config=args.__dict__)
@@ -489,7 +476,7 @@ def main():
         param.requires_grad = True
     model = ResNetModule(args, resnet)
 
-    trainer = pl.Trainer(
+    trainer = L.Trainer(
         max_epochs=100,
         callbacks=[checkpoint_callback, early_stopping],
         accelerator='gpu',
@@ -505,7 +492,21 @@ def main():
     # logger.watch(model, log='all')
     logger.watch(model, log_graph=False)
 
+
     trainer.fit(model, train_dataset)
+
+    model.to(device)
+    optimizer = model.configure_optimizers()
+    train_dataset.setup()
+    trainloader =  train_dataset.train_dataloader()
+    for i,  data in enumerate(trainloader):
+        loss = model.training_step([data[0].cuda(), data[1].cuda()], 0)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        break
+
 
     # print elpased time
     elapsed_time = datetime.now() - time
