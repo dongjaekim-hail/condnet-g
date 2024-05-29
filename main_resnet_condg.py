@@ -12,14 +12,14 @@ import torchvision.models as models
 from datetime import datetime
 import wandb
 import tqdm
-
+import numpy as np
+from torch_geometric.nn import DenseSAGEConv
 
 class ImageNetDataModule(L.LightningDataModule):
     def __init__(self, data_dir: str = './data', batch_size: int = 32, debug: bool = False):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
-
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.Grayscale(num_output_channels=3),  # Convert grayscale to RGB 
@@ -86,7 +86,6 @@ class ImageNetDataModule(L.LightningDataModule):
     def predict_dataloader(self):
         return DataLoader(self.predict_dataset, batch_size=self.batch_size, shuffle=False)
 
-
 class ImagenetDataset(Dataset):
     def __init__(self, dataset_path, transform=None):
         self.dataset = load_from_disk(dataset_path)
@@ -99,19 +98,6 @@ class ImagenetDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, label
-
-
-class Classifier(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.l1 = nn.Linear(28 * 28, 64)
-        self.l2 = nn.Linear(64, 10)
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.l1(x))
-        x = self.l2(x)
-        return x
 
 class ResNet50(torch.nn.Module):
     def __init__(self, device):
@@ -242,35 +228,271 @@ class ResNet50(torch.nn.Module):
             x = self.fc(x)
 
         return x, hs
+def adj(resnet_model, bidirect = True, last_layer = True, edge2itself = True):
+    # resnet_model = models.resnet50(pretrained=True)
+    if last_layer:
+        num_channels_ls = []
+        for i in range(len(list(resnet_model.children())[0:4])):
+            try:
+                num_channels_ls.append(list(resnet_model.children())[0:4][i].in_channels)
+            except Exception:
+                continue
+        for layer in list(resnet_model.children())[4:8]:
+            for bottleneck in layer:
+                try:
+                    num_channels_ls.append(bottleneck.conv1.in_channels)
+                    num_channels_ls.append(bottleneck.conv2.in_channels)
+                    num_channels_ls.append(bottleneck.conv3.in_channels)
+                except Exception:
+                    continue
+                    # for l in bottleneck.children():
+                    #     if isinstance(l, torch.nn.modules.conv.Conv2d):
+                    #         num_channels_ls.append(l.in_channels)
+                    #     elif isinstance(l, torch.nn.Sequential):
+                    #         for sub_layer in l.children():
+                    #             if isinstance(sub_layer, torch.nn.modules.conv.Conv2d):
+                    #                 num_channels_ls.append(sub_layer.in_channels)
+                #     for l in bottleneck.children():
+                #         if 'Conv' in str(l):
+                #             num_channels_ls.append(l.in_channels)
+                # except Exception:
+                #     continue
+        num_channels_ls.append(list(resnet_model.children())[7][2].conv3.out_channels)
+        num_channels = sum(num_channels_ls)
+        num_conv_layers = len(num_channels_ls)
 
-class LitClassifier(L.LightningModule):
-    def __init__(self, classifier):
+    else:
+        num_channels_ls = []
+        for i in range(len(list(resnet_model.children())[0:4])):
+            try:
+                num_channels_ls.append(list(resnet_model.children())[0:4][i].in_channels)
+            except Exception:
+                continue
+        for layer in list(resnet_model.children())[4:8]:
+            for bottleneck in layer:
+                try:
+                    num_channels_ls.append(bottleneck.conv1.in_channels)
+                    num_channels_ls.append(bottleneck.conv2.in_channels)
+                    num_channels_ls.append(bottleneck.conv3.in_channels)
+                except Exception:
+                    continue
+        num_channels = sum(num_channels_ls)
+        num_conv_layers = len(num_channels_ls)
+
+    adjmatrix = np.zeros((num_channels, num_channels), dtype=np.int16)
+    current_node = 0
+
+    for i in range(num_conv_layers - 1):
+        # layer = model.layers[i]
+        # num_current = layer.in_features
+        # num_next = layer.out_features
+        num_current = num_channels_ls[i]
+        num_next = num_channels_ls[i + 1]
+        for j in range(current_node, current_node + num_current):
+            for k in range(current_node + num_current, current_node + num_current + num_next):
+                adjmatrix[j, k] = 1
+
+        if i % 3 == 0 and i != 0:
+            for j in range(current_node, current_node + num_current):
+                for k in range(current_node - num_channels_ls[i - 3], current_node + num_current):
+                    adjmatrix[j, k] = 1
+
+    if bidirect:
+        adjmatrix += adjmatrix.T
+
+    if edge2itself:
+        adjmatrix += np.eye(num_channels, dtype=np.int16)
+        # make sure every element that is non-zero is 1
+    adjmatrix[adjmatrix != 0] = 1
+    return adjmatrix, num_channels_ls
+
+class runtime_pruner(L.LightningModule):
+    def __init__(self, resnet, gnn_policy, adj_, num_channels_ls, args, device):
         super().__init__()
-        self.classifier = classifier
+        self.resnet = resnet
+        self.gnn_policy = gnn_policy
+        self.adj = adj_
+        self.num_channels_ls = num_channels_ls
+        self.tau = args.tau
+        self.lambda_s = args.lambda_s
+        self.lambda_v = args.lambda_v
+        self.lambda_l2 = args.lambda_l2
+        self.lambda_pg = args.lambda_pg
+        self.learning_rate = args.learning_rate
+        self.accum_step = args.accum_step
+        self.automatic_optimization = False
 
     def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
+        resnet_opt, gnn_opt = self.optimizers()
+        resnet_opt.zero_grad()
+        gnn_opt.zero_grad()
+
+        # split batch with self.accum_step
+        c_ = 0
+        acc_ = 0
+        PG_ = 0
+
         x, y = batch
-        y_hat = self.classifier(x)
-        loss = F.cross_entropy(y_hat[0], y)
-        acc = accuracy(torch.argmax(y_hat[0],dim = 1), y, task = 'multiclass', num_classes=1000)
-        self.log('train_loss', loss, prog_bar=True)
+        accum_batch_size = len(x) // self.accum_step
+        for i in range(0, len(x), accum_batch_size):
+            x_batch = x[i:i + accum_batch_size]
+            y_batch = y[i:i + accum_batch_size]
+
+            self.resnet.eval()
+            with torch.no_grad():
+                y_hat_surrogate, hs = self.resnet(x_batch)
+            us, p = self.gnn_policy(hs, self.adj)
+            self.resnet.train()
+
+            outputs, hs = self.resnet(x_batch, cond_drop=True, us=us.detach(), channels=self.num_channels_ls)
+            c = F.cross_entropy(outputs, y_batch)
+            acc = accuracy(torch.argmax(outputs, dim=1), y_batch, task='multiclass', num_classes=1000)
+            L = c + self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
+                                        torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau), 2).mean())
+            L += self.lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
+                                        p.squeeze().var(axis=1).mean())
+            logp = torch.log(p.squeeze()).sum(axis=1).mean()
+            PG = self.lambda_pg * c * (-logp) + L
+            PG /= self.accum_step
+            self.manual_backward(PG)
+
+            c_ += c.item()
+            acc_ += acc.item()
+            PG_ += PG.item()
+
+        resnet_opt.step()
+        gnn_opt.step()
+
+        c = c_ / self.accum_step
+        acc = acc_ / self.accum_step
+        PG = PG_ / self.accum_step
+
+        self.log('train_loss', c, prog_bar=True)
         self.log('train_accuracy', acc, prog_bar=True)
-        return loss
+        self.log('train_policy_loss', PG, prog_bar=True)
+
 
     def validation_step(self, batch, batch_idx):
-        # validation_step defines the train loop.
         x, y = batch
-        y_hat = self.classifier(x)
-        loss = F.cross_entropy(y_hat[0], y)
-        acc = accuracy(torch.argmax(y_hat[0],dim = 1), y, task = 'multiclass', num_classes=1000)
-        self.log('val_loss', loss, prog_bar=True)
+
+        c_ = 0
+        acc_ = 0
+        PG_ = 0
+
+        accum_batch_size = len(x) // self.accum_step
+        for i in range(0, len(x), accum_batch_size):
+            x_batch = x[i:i + accum_batch_size]
+            y_batch = y[i:i + accum_batch_size]
+
+            self.resnet.eval()
+            with torch.no_grad():
+                y_hat_surrogate, hs = self.resnet(x_batch)
+                us, p = self.gnn_policy(hs, self.adj)
+
+                outputs, hs = self.resnet(x_batch, cond_drop=True, us=us.detach(), channels=self.num_channels_ls)
+                c = F.cross_entropy(outputs, y_batch)
+                acc = accuracy(torch.argmax(outputs, dim=1), y_batch, task='multiclass', num_classes=1000)
+                L = c + self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
+                                            torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau), 2).mean())
+                L += self.lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
+                                            p.squeeze().var(axis=1).mean())
+                logp = torch.log(p.squeeze()).sum(axis=1).mean()
+                PG = self.lambda_pg * c * (-logp) + L
+                PG /= self.accum_step
+
+            c_ += c.item()
+            acc_ += acc.item()
+            PG_ += PG.item()
+
+        c = c_ / self.accum_step
+        acc = acc_ / self.accum_step
+        PG = PG_ / self.accum_step
+
+        self.log('val_loss', c, prog_bar=True)
         self.log('val_accuracy', acc, prog_bar=True)
-        return loss
+        self.log('val_policy_loss', PG, prog_bar=True)
+
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
+        resnet_optimizer = torch.optim.SGD(self.resnet.parameters(), lr=self.learning_rate,
+                                  momentum=0.9, weight_decay=self.lambda_l2)
+        gnn_optimizer = torch.optim.SGD(self.gnn_policy.parameters(), lr=self.learning_rate,
+                                    momentum=0.9, weight_decay=self.lambda_l2)
+        return resnet_optimizer, gnn_optimizer
+
+
+class Gnn(nn.Module):
+    def __init__(self, minprob, maxprob, hidden_size = 64, device ='cpu'):
+        super().__init__()
+        self.conv1 = DenseSAGEConv(7*7, hidden_size)
+        self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
+        self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
+        self.fc1 = nn.Linear(hidden_size, 1)
+        # self.fc2 = nn.Linear(64,1, bias=False)
+        self.minprob = minprob
+        self.maxprob = maxprob
+        self.device = device
+
+    def forward(self, hs, adj):
+        device = self.device
+        # hs : hidden activity
+        h = hs[0]
+        for i in hs[1:]:
+            h = torch.cat((h, i), dim=1)
+        h = h.to(device)
+
+        batch_adj = torch.stack([torch.Tensor(adj) for _ in range(h.shape[0])])
+        batch_adj = batch_adj.to(device)
+
+        # hs_0 = hs.unsqueeze(-1)
+
+        hs = F.sigmoid(self.conv1(h, batch_adj))
+        hs = F.sigmoid(self.conv2(hs, batch_adj))
+        hs = F.sigmoid(self.conv3(hs, batch_adj))
+        hs = self.fc1(hs)
+        p = F.sigmoid(hs)
+        # bernoulli sampling
+        p = p * (self.maxprob - self.minprob) + self.minprob
+        u = torch.bernoulli(p).to(device)
+
+        return u, p
+
+
+class CondNet(nn.Module):
+    def __init__(self):
+        super.__init__()
+        mlp_hidden = 1024
+        output_dim = 10
+
+        n_each_policylayer = 1
+        # n_each_policylayer = 1 # if you have only 1 layer perceptron for policy net
+        self.policy_net = nn.ModuleList()
+        temp = nn.ModuleList()
+        temp.append(nn.Linear(self.input_dim, mlp_hidden))
+        temp.append(nn.Linear(mlp_hidden, mlp_hidden))
+        self.policy_net.append(temp)
+
+        for i in range(len(self.mlp)-2):
+            temp = nn.ModuleList()
+            for j in range(n_each_policylayer):
+                temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i].out_features))
+            self.policy_net.append(temp)
+        self.policy_net.to(self.device)
+class RuntimePruning(L.LightningModule):
+    def __init__(self, model, args):
+        super().__init__()
+        self.model = model
+        self.args = args
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.train_acc = L.Accuracy()
+        self.val_acc = L.Accuracy()
+        self.test_acc = L.Accuracy()
+        self.train_loss = L.Loss()
+        self.val_loss = L.Loss()
+        self.test_loss = L.Loss()
+
 
 def main():
     # get args
@@ -292,16 +514,16 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=1e-2)
-    args.add_argument('--BATCH_SIZE', type=int, default=100)
+    args.add_argument('--BATCH_SIZE', type=int, default=5)
     # args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=5)
+    args.add_argument('--accum-step', type=int, default=1)
     # parameters related to pytorch_lightning
     # args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--allow_tf32', type=int, default=0)
     # args.add_argument('--benchmark', type=bool, default=True)
     args.add_argument('--benchmark', type=int, default=0)
-    args.add_argument('--precision', type=str, default='32') # 'bf16', '32'
+    args.add_argument('--precision', type=str, default='bf16') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='high')
     args.add_argument('--debug', type=bool, default=False)
@@ -339,7 +561,7 @@ def main():
     elif args.matmul_precision == 'high':
         torch.set_float32_matmul_precision("high")
 
-    logger = WandbLogger(project="CONDG_RVS", entity='hails', name='resnet50_imagenet',
+    logger = WandbLogger(project="CONDG_RVS2", entity='hails', name='resnet50_imagenet',
                             config=args.__dict__)
                          # config=args.__dict__, log_model='all')
 
@@ -356,14 +578,17 @@ def main():
     dir2save = 'D:/imagenet-1k/'
     # dir2save = '/Users/dongjaekim/Documents/imagenet'
 
-    data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE, debug=True)
+    data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE*args.accum_step, debug=True)
 
     resnet = ResNet50(device)
     resnet = resnet.to(device)
     for param in resnet.parameters():
         param.requires_grad = True
 
-    model = LitClassifier(resnet)
+    gnn_policy = Gnn(args.condnet_min_prob, args.condnet_max_prob, hidden_size=args.hidden_size, device=device).to(device)
+    adj_, num_channels_ls = adj(resnet)
+
+    model = runtime_pruner(resnet, gnn_policy, adj_, num_channels_ls, args, device)
 
     logger.watch(model, log_graph=False)
     # train model
@@ -373,8 +598,7 @@ def main():
         accelerator='gpu',
         precision= args.precision,
         check_val_every_n_epoch=2,
-        logger=logger,
-        accumulate_grad_batches=args.accum_step,
+        logger=logger
     )
     trainer.fit(model=model, datamodule=data_module)
 
