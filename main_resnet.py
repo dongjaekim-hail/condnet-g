@@ -252,7 +252,7 @@ class LitClassifier(L.LightningModule):
         # training_step defines the train loop.
         x, y = batch
         y_hat = self.classifier(x)
-        loss = F.cross_entropy(y_hat[0], y)
+        loss = F.cross_entropy(F.softmax(y_hat[0],dim=1), y)
         acc = accuracy(torch.argmax(y_hat[0],dim = 1), y, task = 'multiclass', num_classes=1000)
         self.log('train_loss', loss, prog_bar=True)
         self.log('train_accuracy', acc, prog_bar=True)
@@ -262,7 +262,7 @@ class LitClassifier(L.LightningModule):
         # validation_step defines the train loop.
         x, y = batch
         y_hat = self.classifier(x)
-        loss = F.cross_entropy(y_hat[0], y)
+        loss = F.cross_entropy(F.softmax(y_hat[0],dim=1), y)
         acc = accuracy(torch.argmax(y_hat[0],dim = 1), y, task = 'multiclass', num_classes=1000)
         self.log('val_loss', loss, prog_bar=True)
         self.log('val_accuracy', acc, prog_bar=True)
@@ -301,7 +301,7 @@ def main():
     args.add_argument('--allow_tf32', type=int, default=0)
     # args.add_argument('--benchmark', type=bool, default=True)
     args.add_argument('--benchmark', type=int, default=0)
-    args.add_argument('--precision', type=str, default='16-true') # 'bf16', '32'
+    args.add_argument('--precision', type=str, default='16-mixed') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='high')
     args.add_argument('--debug', type=bool, default=True)

@@ -14,6 +14,9 @@ import wandb
 import tqdm
 import numpy as np
 from torch_geometric.nn import DenseSAGEConv
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 
 class ImageNetDataModule(L.LightningDataModule):
     def __init__(self, data_dir: str = './data', batch_size: int = 32, debug: bool = False):
@@ -558,16 +561,16 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=1e-2)
-    args.add_argument('--BATCH_SIZE', type=int, default=10)
+    args.add_argument('--BATCH_SIZE', type=int, default=5)
     # args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
-    args.add_argument('--accum-step', type=int, default=10)
+    args.add_argument('--accum-step', type=int, default=20)
     # parameters related to pytorch_lightning
     # args.add_argument('--allow_tf32', type=bool, default=True)
     args.add_argument('--allow_tf32', type=int, default=0)
     # args.add_argument('--benchmark', type=bool, default=True)
     args.add_argument('--benchmark', type=int, default=0)
-    args.add_argument('--precision', type=str, default='16-true') # 'bf16':3090 or newer (ampere), '32', '16-true', '16-mixed'
+    args.add_argument('--precision', type=str, default='16-mixed') # 'bf16':3090 or newer (ampere), '32', '16-true', '16-mixed'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='high')
     args.add_argument('--debug', type=bool, default=True)
