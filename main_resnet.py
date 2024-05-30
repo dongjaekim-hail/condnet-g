@@ -304,7 +304,7 @@ def main():
     args.add_argument('--precision', type=str, default='16-mixed') # 'bf16', '32'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='high')
-    args.add_argument('--debug', type=bool, default=True)
+    args.add_argument('--debug', type=bool, default=False)
     args = args.parse_args()
 
     if args.allow_tf32 == 1:
@@ -356,7 +356,7 @@ def main():
     dir2save = 'D:/imagenet-1k/'
     # dir2save = '/Users/dongjaekim/Documents/imagenet'
 
-    data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE, debug=True)
+    data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE, debug=args.debug)
 
     resnet = ResNet50(device)
     resnet = resnet.to(device)
