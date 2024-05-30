@@ -330,7 +330,10 @@ class runtime_pruner(L.LightningModule):
         # split batch with self.accum_step
         c_ = 0
         acc_ = 0
+        acc_bf = 0
         PG_ = 0
+        tau_ = 0
+        L_ = 0
 
         x, y = batch
         accum_batch_size = len(x) // self.accum_step
@@ -341,6 +344,7 @@ class runtime_pruner(L.LightningModule):
             self.resnet.eval()
             with torch.no_grad():
                 y_hat_surrogate, hs = self.resnet(x_batch)
+                acc_bf = accuracy(torch.argmax(y_hat_surrogate, dim=1), y_batch, task='multiclass', num_classes=1000)
             us, p = self.gnn_policy(hs, self.adj)
             self.resnet.train()
 
@@ -356,9 +360,13 @@ class runtime_pruner(L.LightningModule):
             PG /= self.accum_step
             self.manual_backward(PG)
 
+            tau__ = us.mean().detach().item()
+
             c_ += c.item()
             acc_ += acc.item()
             PG_ += PG.item()
+            L_ += L.item()
+            tau_ += tau__
 
         resnet_opt.step()
         gnn_opt.step()
@@ -366,10 +374,16 @@ class runtime_pruner(L.LightningModule):
         c = c_ / self.accum_step
         acc = acc_ / self.accum_step
         PG = PG_ / self.accum_step
+        L = L_ / self.accum_step
+        tau = tau_ / self.accum_step
 
-        self.log('train_loss', c, prog_bar=True)
-        self.log('train_accuracy', acc, prog_bar=True)
-        self.log('train_policy_loss', PG, prog_bar=True)
+
+        self.log('train/batch_cost', c, prog_bar=True)
+        self.log('train/batch_acc', acc, prog_bar=True)
+        self.log('train/batch_acc_bf', acc_bf, prog_bar=True)
+        self.log('train/batch_pg', PG, prog_bar=True)
+        self.log('train/batch_loss', L, prog_bar=True)
+        self.log('train/batch_tau', tau, prog_bar=True)
 
 
     def validation_step(self, batch, batch_idx):
@@ -377,7 +391,11 @@ class runtime_pruner(L.LightningModule):
 
         c_ = 0
         acc_ = 0
+        acc_bf_ = 0
         PG_ = 0
+        L_ = 0
+        tau_ = 0
+
 
         accum_batch_size = len(x) // self.accum_step
         for i in range(0, len(x), accum_batch_size):
@@ -387,6 +405,7 @@ class runtime_pruner(L.LightningModule):
             self.resnet.eval()
             with torch.no_grad():
                 y_hat_surrogate, hs = self.resnet(x_batch)
+                acc_bf = accuracy(torch.argmax(y_hat_surrogate, dim=1), y_batch, task='multiclass', num_classes=1000)
                 us, p = self.gnn_policy(hs, self.adj)
 
                 outputs, hs = self.resnet(x_batch, cond_drop=True, us=us.detach(), channels=self.num_channels_ls)
@@ -400,17 +419,29 @@ class runtime_pruner(L.LightningModule):
                 PG = self.lambda_pg * c * (-logp) + L
                 PG /= self.accum_step
 
+                tau__ = us.mean().detach().item()
+
+
             c_ += c.item()
             acc_ += acc.item()
             PG_ += PG.item()
+            L_ += L.item()
+            tau_ += tau__
+
 
         c = c_ / self.accum_step
         acc = acc_ / self.accum_step
+        acc_bf = acc_bf_ / self.accum_step
         PG = PG_ / self.accum_step
+        L = L_ / self.accum_step
+        tau = tau_ / self.accum_step
 
-        self.log('val_loss', c, prog_bar=True)
-        self.log('val_accuracy', acc, prog_bar=True)
-        self.log('val_policy_loss', PG, prog_bar=True)
+        self.log('test/batch_cost', c, prog_bar=True)
+        self.log('test/batch_acc', acc, prog_bar=True)
+        self.log('test/batch_acc_bf', acc_bf, prog_bar=True)
+        self.log('test/batch_pg', PG, prog_bar=True)
+        self.log('test/batch_loss', L, prog_bar=True)
+        self.log('test/batch_tau', tau, prog_bar=True)
 
 
     def configure_optimizers(self):
@@ -514,16 +545,16 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=1e-2)
-    args.add_argument('--BATCH_SIZE', type=int, default=5)
+    args.add_argument('--BATCH_SIZE', type=int, default=10)
     # args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=256)
-    args.add_argument('--accum-step', type=int, default=1)
+    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--accum-step', type=int, default=10)
     # parameters related to pytorch_lightning
     # args.add_argument('--allow_tf32', type=bool, default=True)
-    args.add_argument('--allow_tf32', type=int, default=0)
+    args.add_argument('--allow_tf32', type=int, default=1)
     # args.add_argument('--benchmark', type=bool, default=True)
     args.add_argument('--benchmark', type=int, default=0)
-    args.add_argument('--precision', type=str, default='bf16') # 'bf16', '32'
+    args.add_argument('--precision', type=str, default='16-true') # 'bf16':3090 or newer (ampere), '32', '16-true', '16-mixed'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='high')
     args.add_argument('--debug', type=bool, default=False)
