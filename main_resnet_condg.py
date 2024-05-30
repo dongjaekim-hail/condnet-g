@@ -322,10 +322,16 @@ class runtime_pruner(L.LightningModule):
         self.accum_step = args.accum_step
         self.automatic_optimization = False
 
+        self.e_time_resnet_eval = []
+
     def training_step(self, batch, batch_idx):
         resnet_opt, gnn_opt = self.optimizers()
         resnet_opt.zero_grad()
         gnn_opt.zero_grad()
+        # if self.current_epoch % 2 ==0:
+        #     # resnet 만 학습
+        # else:
+        #     # learn both
 
         # split batch with self.accum_step
         c_ = 0
@@ -340,17 +346,24 @@ class runtime_pruner(L.LightningModule):
         for i in range(0, len(x), accum_batch_size):
             x_batch = x[i:i + accum_batch_size]
             y_batch = y[i:i + accum_batch_size]
-
+            # torch.cuda.synchronize()
+            # time_ = time.time()
             self.resnet.eval()
             with torch.no_grad():
                 y_hat_surrogate, hs = self.resnet(x_batch)
                 acc_bf = accuracy(torch.argmax(y_hat_surrogate, dim=1), y_batch, task='multiclass', num_classes=1000)
+            # torch.cuda_syncrhonize()
+            # etime = time.time() - time_
+
             us, p = self.gnn_policy(hs, self.adj)
             self.resnet.train()
 
             outputs, hs = self.resnet(x_batch, cond_drop=True, us=us.detach(), channels=self.num_channels_ls)
             c = F.cross_entropy(outputs, y_batch)
-            acc = accuracy(torch.argmax(outputs, dim=1), y_batch, task='multiclass', num_classes=1000)
+            try:
+                acc = accuracy(torch.argmax(outputs, dim=1), y_batch, task='multiclass', num_classes=1000)
+            except:
+                print('')
             L = c + self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
                                         torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau), 2).mean())
             L += self.lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
@@ -551,13 +564,13 @@ def main():
     args.add_argument('--accum-step', type=int, default=10)
     # parameters related to pytorch_lightning
     # args.add_argument('--allow_tf32', type=bool, default=True)
-    args.add_argument('--allow_tf32', type=int, default=1)
+    args.add_argument('--allow_tf32', type=int, default=0)
     # args.add_argument('--benchmark', type=bool, default=True)
     args.add_argument('--benchmark', type=int, default=0)
     args.add_argument('--precision', type=str, default='16-true') # 'bf16':3090 or newer (ampere), '32', '16-true', '16-mixed'
     args.add_argument('--accelerator', type=str, default=device)
     args.add_argument('--matmul_precision', type=str, default='high')
-    args.add_argument('--debug', type=bool, default=False)
+    args.add_argument('--debug', type=bool, default=True)
     args = args.parse_args()
 
     if args.allow_tf32 == 1:
@@ -609,7 +622,7 @@ def main():
     dir2save = 'D:/imagenet-1k/'
     # dir2save = '/Users/dongjaekim/Documents/imagenet'
 
-    data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE*args.accum_step, debug=True)
+    data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE*args.accum_step, debug=args.debug)
 
     resnet = ResNet50(device)
     resnet = resnet.to(device)
