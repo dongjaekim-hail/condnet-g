@@ -252,7 +252,7 @@ class LitClassifier(L.LightningModule):
         # training_step defines the train loop.
         x, y = batch
         y_hat = self.classifier(x)
-        loss = F.cross_entropy(F.softmax(y_hat[0],dim=1), y)
+        loss = F.cross_entropy(y_hat[0], y)
         acc = accuracy(torch.argmax(y_hat[0],dim = 1), y, task = 'multiclass', num_classes=1000)
         self.log('train_loss', loss, prog_bar=True)
         self.log('train_accuracy', acc, prog_bar=True)
@@ -262,14 +262,14 @@ class LitClassifier(L.LightningModule):
         # validation_step defines the train loop.
         x, y = batch
         y_hat = self.classifier(x)
-        loss = F.cross_entropy(F.softmax(y_hat[0],dim=1), y)
+        loss = F.cross_entropy(y_hat[0], y)
         acc = accuracy(torch.argmax(y_hat[0],dim = 1), y, task = 'multiclass', num_classes=1000)
         self.log('val_loss', loss, prog_bar=True)
         self.log('val_accuracy', acc, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-2)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-1)
         return optimizer
 
 def main():
