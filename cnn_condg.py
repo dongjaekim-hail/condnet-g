@@ -67,21 +67,21 @@ class Mlp(nn.Module):
         self.dropout = nn.Dropout(0.25)
 
     def forward(self, x, cond_drop=False, us=None, channels=None):
-        hs = [torch.flatten(F.interpolate(x, size=(8, 8)), 2).to(device)]
+        hs = [torch.flatten(F.interpolate(x, size=(16, 16)), 2).to(device)]
 
         if not cond_drop:
             x = self.conv1(x)
             x = F.relu(x)
-            hs.append(torch.flatten(F.interpolate(x, size=(14, 14)), 2).to(device))
+            hs.append(torch.flatten(F.interpolate(x, size=(16, 16)), 2).to(device))
             x = self.pool(x)
             x = self.conv2(x)
             x = F.relu(x)
-            hs.append(torch.flatten(F.interpolate(x, size=(14, 14)), 2).to(device))
+            hs.append(torch.flatten(F.interpolate(x, size=(16, 16)), 2).to(device))
             x = self.pool(x)
             x = x.view(-1, 64 * 8 * 8)
             x = self.fc1(x)
             x = F.relu(x)
-            hs.append(torch.flatten(F.interpolate(x, size=(14, 14)), 2).to(device))
+            hs.append(torch.flatten(F.interpolate(x, size=(16, 16)), 2).to(device))
             x = self.dropout(x)
             x = self.fc2(x)
 
@@ -146,24 +146,34 @@ class Gnn(nn.Module):
 
 def adj(model, bidirect = True, last_layer = True, edge2itself = True):
     if last_layer:
-        num_nodes = sum([layer.in_features for layer in model.layers]) + model.layers[-1].out_features
-        nl = len(model.layers)
-        trainable_nodes = np.concatenate(
-            (np.ones(sum([layer.in_features for layer in model.layers])), np.zeros(model.layers[-1].out_features)),
-            axis=0)
-        # trainable_nodes => [1,1,1,......,1,0,0,0] => input layer & hidden layer 의 노드 개수 = 1의 개수, output layer 의 노드 개수 = 0의 개수
+        num_channels_ls = []
+        for i in range(len(list(model.children()))):
+            try:
+                num_channels_ls.append(list(model.children())[i].in_channels)
+            except Exception:
+                continue
+        num_channels_ls.append(model.conv2.out_channels)
+        num_channels = sum(num_channels_ls)
+        num_conv_layers = len(num_channels_ls)
     else:
-        num_nodes = sum([layer.in_features for layer in model.layers])
-        nl = len(model.layers) - 1
-        trainable_nodes = np.ones(num_nodes)
+        num_channels_ls = []
+        for i in range(len(list(model.children()))):
+            try:
+                num_channels_ls.append(list(model.children())[i].in_channels)
+            except Exception:
+                continue
+        num_channels = sum(num_channels_ls)
+        num_conv_layers = len(num_channels_ls)
 
-    adjmatrix = np.zeros((num_nodes, num_nodes), dtype=np.int16)
+    adjmatrix = np.zeros((num_channels, num_channels), dtype=np.int16)
     current_node = 0
 
-    for i in range(nl):
-        layer = model.layers[i]
-        num_current = layer.in_features
-        num_next = layer.out_features
+    for i in range(num_conv_layers - 1):
+        # layer = model.layers[i]
+        # num_current = layer.in_features
+        # num_next = layer.out_features
+        num_current = num_channels_ls[i]
+        num_next = num_channels_ls[i + 1]
 
         for j in range(current_node, current_node + num_current):
             for k in range(current_node + num_current, current_node + num_current + num_next):
@@ -178,10 +188,10 @@ def adj(model, bidirect = True, last_layer = True, edge2itself = True):
         adjmatrix += adjmatrix.T
 
     if edge2itself:
-        adjmatrix += np.eye(num_nodes, dtype=np.int16)
+        adjmatrix += np.eye(num_channels, dtype=np.int16)
         # make sure every element that is non-zero is 1
     adjmatrix[adjmatrix != 0] = 1
-    return adjmatrix, trainable_nodes
+    return adjmatrix, num_channels_ls
 def main():
     # get args
     now = datetime.now()
