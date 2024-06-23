@@ -48,12 +48,12 @@ sns.set_style('darkgrid')
 class SimpleCNN(nn.Module):
     def __init__(self):
         super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.fc1 = nn.Linear(64 * 8 * 8, 512)
         self.fc2 = nn.Linear(512, 10)
-        self.dropout = nn.Dropout(0.25)
+        # self.dropout = nn.Dropout(0.25)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -65,7 +65,7 @@ class SimpleCNN(nn.Module):
         x = x.view(-1, 64 * 8 * 8)
         x = self.fc1(x)
         x = F.relu(x)
-        x = self.dropout(x)
+        # x = self.dropout(x)
         x = self.fc2(x)
 
         return x
@@ -137,7 +137,7 @@ def main(ITE=0):
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
     traindataset = datasets.CIFAR10('../data', train=True, download=True, transform=transform)
     testdataset = datasets.CIFAR10('../data', train=False, transform=transform)
-train_loader = torch.utils.data.DataLoader(traindataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
+    train_loader = torch.utils.data.DataLoader(traindataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
                                                drop_last=False)
     test_loader = torch.utils.data.DataLoader(testdataset, batch_size=args.batch_size, shuffle=False, num_workers=0,
                                               drop_last=True)
