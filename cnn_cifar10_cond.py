@@ -151,6 +151,7 @@ class model_condnet(nn.Module):
         u = u_i
 
         # FC2 레이어와 마스킹
+        h = self.cnn.dropout(h)
         h = F.relu(self.cnn.fc2(h))
         # print(f"After FC2: {h.shape}")
 
@@ -261,10 +262,10 @@ def main():
         shuffle=False
     )
 
-    # wandb.init(project="condgnet",
-    #             config=args.__dict__,
-    #             name='cond_lastchance1024' + '_tau=' + str(args.tau)
-    #             )
+    wandb.init(project="condgnet",
+                config=args.__dict__,
+                name='cnn_cond_cifar10_all' + '_tau=' + str(args.tau)
+                )
 
     # create model
     model = model_condnet(args)
@@ -349,14 +350,14 @@ def main():
             PGs += PG.to('cpu').item()
 
             # wandb log training/batch
-            # wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
             print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, np.mean([tau_.mean().item() for tau_ in layer_masks])
                                                                                                      ))
 
         # wandb log training/epoch
-        # wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -420,8 +421,8 @@ def main():
             #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
-            # wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn, 'test/epoch_tau': taus / bn })
-        torch.save(model.state_dict(), './cond1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
-    # wandb.finish()
+            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn, 'test/epoch_tau': taus / bn })
+        torch.save(model.state_dict(), './cnn_cond_cifar10_all' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+    wandb.finish()
 if __name__=='__main__':
     main()

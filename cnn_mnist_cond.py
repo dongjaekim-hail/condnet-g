@@ -151,6 +151,7 @@ class model_condnet(nn.Module):
         u = u_i
 
         # FC2 레이어와 마스킹
+        h = self.cnn.dropout(h)
         h = F.relu(self.cnn.fc2(h))
         print(f"After FC2: {h.shape}")
 
