@@ -45,33 +45,201 @@ sns.set_style('darkgrid')
 #         x = self.classifier(x)
 #         return x
 
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
-        self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(64 * 16 * 16, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 10)
-        self.dropout = nn.Dropout(0.25)
+def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+
+
+def conv1x1(in_planes, out_planes, stride=1):
+    """1x1 convolution"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
+
+class BasicBlock(nn.Module):
+    expansion = 1
+    __constants__ = ['downsample']
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
+        super(BasicBlock, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        if groups != 1 or base_width != 64:
+            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+        if dilation > 1:
+            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
+        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = norm_layer(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes)
+        self.bn2 = norm_layer(planes)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+
+class Bottleneck(nn.Module):
+    expansion = 4
+    __constants__ = ['downsample']
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
+        super(Bottleneck, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        width = int(planes * (base_width / 64.)) * groups
+        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1(inplanes, width)
+        self.bn1 = norm_layer(width)
+        self.conv2 = conv3x3(width, width, stride, groups, dilation)
+        self.bn2 = norm_layer(width)
+        self.conv3 = conv1x1(width, planes * self.expansion)
+        self.bn3 = norm_layer(planes * self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+
+class ResNet(nn.Module):
+
+    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None,
+                 norm_layer=None):
+        super(ResNet, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        self._norm_layer = norm_layer
+
+        self.inplanes = 64
+        self.dilation = 1
+        if replace_stride_with_dilation is None:
+            # each element in the tuple indicates if we should replace
+            # the 2x2 stride with a dilated convolution instead
+            replace_stride_with_dilation = [False, False, False]
+        if len(replace_stride_with_dilation) != 3:
+            raise ValueError("replace_stride_with_dilation should be None "
+                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
+        self.groups = groups
+        self.base_width = width_per_group
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.bn1 = norm_layer(self.inplanes)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
+                                       dilate=replace_stride_with_dilation[0])
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
+                                       dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+                                       dilate=replace_stride_with_dilation[2])
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+        # Zero-initialize the last BN in each residual branch,
+        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
+        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
+        if zero_init_residual:
+            for m in self.modules():
+                if isinstance(m, Bottleneck):
+                    nn.init.constant_(m.bn3.weight, 0)
+                elif isinstance(m, BasicBlock):
+                    nn.init.constant_(m.bn2.weight, 0)
+
+    def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
+        norm_layer = self._norm_layer
+        downsample = None
+        previous_dilation = self.dilation
+        if dilate:
+            self.dilation *= stride
+            stride = 1
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                conv1x1(self.inplanes, planes * block.expansion, stride),
+                norm_layer(planes * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample, self.groups,
+                            self.base_width, previous_dilation, norm_layer))
+        self.inplanes = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(block(self.inplanes, planes, groups=self.groups,
+                                base_width=self.base_width, dilation=self.dilation,
+                                norm_layer=norm_layer))
+
+        return nn.Sequential(*layers)
 
     def forward(self, x):
         x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.pool(x)
-        x = x.view(-1, 64 * 16 * 16)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc3(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
         return x
 
+def _resnet(block, layers, pretrained, progress, **kwargs):
+    model = ResNet(block, layers, **kwargs)
+    return model
+def resnet50(pretrained=False, progress=True, **kwargs):
+    return _resnet(Bottleneck, [3, 4, 6, 3], pretrained, progress,**kwargs)
 
 # ANCHOR Print table of zeros and non-zeros count
 def print_nonzeros(model):
@@ -102,23 +270,21 @@ def main(ITE=0):
     time = datetime.now()
     # Arguement Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.0002, type=float, help="Learning rate")
-    parser.add_argument("--batch_size", default=60, type=int)
+    parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
+    parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=20000, type=int)
+    parser.add_argument("--end_iter", default=30000, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--prune_type", default="lt", type=str, help="lt | reinit")
     parser.add_argument("--gpu", default="0", type=str)
     parser.add_argument("--prune_percent", default=20, type=int, help="Pruning percent")
-    parser.add_argument("--prune_percent_conv", default=10, type=int, help="Pruning percent for conv layers")
-    parser.add_argument("--prune_percent_fc", default=20, type=int, help="Pruning percent for fc layers")
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="LTH", entity='hails', name='cnn_mnist', config=args.__dict__)
-    wandb.login(key="")
+    wandb.init(project="LTH", entity='hails', name='resnet50_imagenet', config=args.__dict__)
+    wandb.login(key="651ddb3adb37c78e1ae53ac7709b316915ee6909")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
@@ -138,32 +304,59 @@ def main(ITE=0):
     # test_loader = torch.utils.data.DataLoader(testdataset, batch_size=args.batch_size, shuffle=False, num_workers=0,
     #                                           drop_last=True)
 
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-    traindataset = datasets.MNIST('../data', train=True, download=True, transform=transform)
-    testdataset = datasets.MNIST('../data', train=False, transform=transform)
-    train_loader = torch.utils.data.DataLoader(traindataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
-                                               drop_last=False)
-    test_loader = torch.utils.data.DataLoader(testdataset, batch_size=args.batch_size, shuffle=False, num_workers=0,
-                                              drop_last=True)
+    dataset_path = r'C:\Users\97dnd\anaconda3\envs\torch\pr\condnet-g\data'
+    dataset = load_from_disk(dataset_path)
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to RGB
+
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
+
+    class CustomDataset(Dataset):
+        def __init__(self, dataset, transform=None):
+            self.dataset = dataset
+            self.transform = transform
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, idx):
+            item = self.dataset[idx]
+            image, label = item['image'], item['label']
+            if self.transform:
+                image = self.transform(image)
+            return image, label
+
+    # 데이터셋에 커스텀 데이터셋 클래스 적용
+    train_dataset = CustomDataset(dataset['validation'], transform=transform)
+    test_dataset = CustomDataset(dataset['validation'], transform=transform)
+
+    # 데이터 로더 정의
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=0)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=0)
 
     # Importing Network Architecture
     global model
-    model = SimpleCNN().to(device)
+    model = resnet50().to(device)
 
     # Weight Initialization
     model.apply(weight_init)
 
     # Copying and Saving Initial State
     initial_state_dict = copy.deepcopy(model.state_dict())
-    checkdir(f"{os.getcwd()}/saves/cnn/mnist/")
+    checkdir(f"{os.getcwd()}/saves/resnet50/imagenet1k/")
     torch.save(model,
-               f"{os.getcwd()}/saves/cnn/mnist/initial_state_dict_{args.prune_type}.pth.tar")
+               f"{os.getcwd()}/saves/resnet50/imagenet1k/initial_state_dict_{args.prune_type}.pth.tar")
 
     # Making Initial Mask
     make_mask(model)
 
     # Optimizer and Loss
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20000, 25000], gamma=0.1)
     criterion = nn.CrossEntropyLoss()  # Default was F.nll_loss
 
     # Layer Looper
@@ -213,9 +406,9 @@ def main(ITE=0):
                 # Save Weights
                 if accuracy > best_accuracy:
                     best_accuracy = accuracy
-                    checkdir(f"{os.getcwd()}/saves/cnn/mnist/")
+                    checkdir(f"{os.getcwd()}/saves/resnet50/imagenet1k/")
                     torch.save(model,
-                               f"{os.getcwd()}/saves/cnn/mnist/{_ite}_model_{args.prune_type}.pth.tar")
+                               f"{os.getcwd()}/saves/resnet50/imagenet1k/{_ite}_model_{args.prune_type}.pth.tar")
 
             # Training
             loss = train(model, train_loader, optimizer, criterion)
@@ -243,26 +436,26 @@ def main(ITE=0):
         plt.plot(np.arange(1, (args.end_iter) + 1),
                  100 * (all_loss - np.min(all_loss)) / np.ptp(all_loss).astype(float), c="blue", label="Loss")
         plt.plot(np.arange(1, (args.end_iter) + 1), all_accuracy, c="red", label="Accuracy")
-        plt.title(f"Loss Vs Accuracy Vs Iterations (mnist,cnn)")
+        plt.title(f"Loss Vs Accuracy Vs Iterations (imagenet1k,resnet50)")
         plt.xlabel("Iterations")
         plt.ylabel("Loss and Accuracy")
         plt.legend()
         plt.grid(color="gray")
-        checkdir(f"{os.getcwd()}/plots/lt/cnn/mnist/")
+        checkdir(f"{os.getcwd()}/plots/lt/resnet50/imagenet1k/")
         plt.savefig(
-            f"{os.getcwd()}/plots/lt/cnn/mnist/{args.prune_type}_LossVsAccuracy_{comp1}.png",
+            f"{os.getcwd()}/plots/lt/resnet50/imagenet1k/{args.prune_type}_LossVsAccuracy_{comp1}.png",
             dpi=1200)
         plt.close()
 
         # Dump Plot values
-        checkdir(f"{os.getcwd()}/dumps/lt/cnn/mnist/")
-        all_loss.dump(f"{os.getcwd()}/dumps/lt/cnn/mnist/{args.prune_type}_all_loss_{comp1}.dat")
+        checkdir(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/")
+        all_loss.dump(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/{args.prune_type}_all_loss_{comp1}.dat")
         all_accuracy.dump(
-            f"{os.getcwd()}/dumps/lt/cnn/mnist/{args.prune_type}_all_accuracy_{comp1}.dat")
+            f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/{args.prune_type}_all_accuracy_{comp1}.dat")
 
         # Dumping mask
-        checkdir(f"{os.getcwd()}/dumps/lt/cnn/mnist/")
-        with open(f"{os.getcwd()}/dumps/lt/cnn/mnist/{args.prune_type}_mask_{comp1}.pkl",
+        checkdir(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/")
+        with open(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/{args.prune_type}_mask_{comp1}.pkl",
                   'wb') as fp:
             pickle.dump(mask, fp)
 
@@ -272,22 +465,22 @@ def main(ITE=0):
         all_accuracy = np.zeros(args.end_iter, float)
 
     # Dumping Values for Plotting
-    checkdir(f"{os.getcwd()}/dumps/lt/cnn/mnist/")
-    comp.dump(f"{os.getcwd()}/dumps/lt/cnn/mnist/{args.prune_type}_compression.dat")
-    bestacc.dump(f"{os.getcwd()}/dumps/lt/cnn/mnist/{args.prune_type}_bestaccuracy.dat")
+    checkdir(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/")
+    comp.dump(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/{args.prune_type}_compression.dat")
+    bestacc.dump(f"{os.getcwd()}/dumps/lt/resnet50/imagenet1k/{args.prune_type}_bestaccuracy.dat")
 
     # Plotting
     a = np.arange(args.prune_iterations)
     plt.plot(a, bestacc, c="blue", label="Winning tickets")
-    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (mnist,cnn)")
+    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (imagenet1k,resnet50)")
     plt.xlabel("Unpruned Weights Percentage")
     plt.ylabel("test accuracy")
     plt.xticks(a, comp, rotation="vertical")
     plt.ylim(0, 100)
     plt.legend()
     plt.grid(color="gray")
-    checkdir(f"{os.getcwd()}/plots/lt/cnn/mnist/")
-    plt.savefig(f"{os.getcwd()}/plots/lt/cnn/mnist/{args.prune_type}_AccuracyVsWeights.png",
+    checkdir(f"{os.getcwd()}/plots/lt/resnet50/imagenet1k/")
+    plt.savefig(f"{os.getcwd()}/plots/lt/resnet50/imagenet1k/{args.prune_type}_AccuracyVsWeights.png",
                 dpi=1200)
     plt.close()
 
@@ -403,66 +596,16 @@ def original_initialization(mask_temp, initial_state_dict):
 
 # Function for Initialization
 def weight_init(m):
-    if isinstance(m, nn.Conv1d):
-        init.normal_(m.weight.data)
-        if m.bias is not None:
-            init.normal_(m.bias.data)
-    elif isinstance(m, nn.Conv2d):
+    if isinstance(m, nn.Conv2d):
         init.xavier_normal_(m.weight.data)
         if m.bias is not None:
             init.normal_(m.bias.data)
-    elif isinstance(m, nn.Conv3d):
-        init.xavier_normal_(m.weight.data)
-        if m.bias is not None:
-            init.normal_(m.bias.data)
-    elif isinstance(m, nn.ConvTranspose1d):
-        init.normal_(m.weight.data)
-        if m.bias is not None:
-            init.normal_(m.bias.data)
-    elif isinstance(m, nn.ConvTranspose2d):
-        init.xavier_normal_(m.weight.data)
-        if m.bias is not None:
-            init.normal_(m.bias.data)
-    elif isinstance(m, nn.ConvTranspose3d):
-        init.xavier_normal_(m.weight.data)
-        if m.bias is not None:
-            init.normal_(m.bias.data)
-    elif isinstance(m, nn.BatchNorm1d):
-        init.normal_(m.weight.data, mean=1, std=0.02)
-        init.constant_(m.bias.data, 0)
     elif isinstance(m, nn.BatchNorm2d):
-        init.normal_(m.weight.data, mean=1, std=0.02)
-        init.constant_(m.bias.data, 0)
-    elif isinstance(m, nn.BatchNorm3d):
         init.normal_(m.weight.data, mean=1, std=0.02)
         init.constant_(m.bias.data, 0)
     elif isinstance(m, nn.Linear):
         init.xavier_normal_(m.weight.data)
         init.normal_(m.bias.data)
-    elif isinstance(m, nn.LSTM):
-        for param in m.parameters():
-            if len(param.shape) >= 2:
-                init.orthogonal_(param.data)
-            else:
-                init.normal_(param.data)
-    elif isinstance(m, nn.LSTMCell):
-        for param in m.parameters():
-            if len(param.shape) >= 2:
-                init.orthogonal_(param.data)
-            else:
-                init.normal_(param.data)
-    elif isinstance(m, nn.GRU):
-        for param in m.parameters():
-            if len(param.shape) >= 2:
-                init.orthogonal_(param.data)
-            else:
-                init.normal_(param.data)
-    elif isinstance(m, nn.GRUCell):
-        for param in m.parameters():
-            if len(param.shape) >= 2:
-                init.orthogonal_(param.data)
-            else:
-                init.normal_(param.data)
 
 if __name__ == "__main__":
     main(ITE=1)

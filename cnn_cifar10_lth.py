@@ -48,26 +48,28 @@ sns.set_style('darkgrid')
 class SimpleCNN(nn.Module):
     def __init__(self):
         super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(64 * 8 * 8, 512)
-        self.fc2 = nn.Linear(512, 10)
-        # self.dropout = nn.Dropout(0.25)
+        self.fc1 = nn.Linear(64 * 16 * 16, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 10)
+        self.dropout = nn.Dropout(0.25)
 
     def forward(self, x):
         x = self.conv1(x)
         x = F.relu(x)
-        x = self.pool(x)
         x = self.conv2(x)
         x = F.relu(x)
         x = self.pool(x)
-        x = x.view(-1, 64 * 8 * 8)
+        x = x.view(-1, 64 * 16 * 16)
         x = self.fc1(x)
         x = F.relu(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         x = self.fc2(x)
-
+        x = F.relu(x)
+        x = self.dropout(x)
+        x = self.fc3(x)
         return x
 
 
@@ -100,21 +102,23 @@ def main(ITE=0):
     time = datetime.now()
     # Arguement Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
-    parser.add_argument("--batch_size", default=256, type=int)
+    parser.add_argument("--lr", default=0.0002, type=float, help="Learning rate")
+    parser.add_argument("--batch_size", default=60, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=30000, type=int)
+    parser.add_argument("--end_iter", default=20000, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--prune_type", default="lt", type=str, help="lt | reinit")
     parser.add_argument("--gpu", default="0", type=str)
     parser.add_argument("--prune_percent", default=20, type=int, help="Pruning percent")
+    parser.add_argument("--prune_percent_conv", default=10, type=int, help="Pruning percent for conv layers")
+    parser.add_argument("--prune_percent_fc", default=20, type=int, help="Pruning percent for fc layers")
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="LTH", entity='hails', name='cnn_cifar10', config=args.__dict__)
-    wandb.login(key="")
+    # wandb.init(project="LTH", entity='hails', name='cnn_mnist', config=args.__dict__)
+    # wandb.login(key="")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
@@ -159,8 +163,7 @@ def main(ITE=0):
     make_mask(model)
 
     # Optimizer and Loss
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20000, 25000], gamma=0.1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()  # Default was F.nll_loss
 
     # Layer Looper
@@ -180,7 +183,7 @@ def main(ITE=0):
 
     for _ite in range(args.start_iter, ITERATION):
         if not _ite == 0:
-            prune_by_percentile(args.prune_percent, resample=resample, reinit=reinit)
+            prune_by_percentile(args.prune_percent_conv, args.prune_percent_fc, resample=resample, reinit=reinit)
             if reinit:
                 model.apply(weight_init)
                 step = 0
@@ -192,14 +195,14 @@ def main(ITE=0):
                 step = 0
             else:
                 original_initialization(mask, initial_state_dict)
-            optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20000, 25000], gamma=0.1)
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
         print(f"\n--- Pruning Level [{ITE}:{_ite}/{ITERATION}]: ---")
 
         # Print the table of Nonzeros in each layer
         comp1 = print_nonzeros(model)
         comp[_ite] = comp1
-        pbar = tqdm(range(args.end_iter))
+        # pbar = tqdm(range(args.end_iter))
+        pbar = tqdm(range(args.end_iter), dynamic_ncols=False)
 
         for iter_ in pbar:
 
@@ -216,20 +219,20 @@ def main(ITE=0):
 
             # Training
             loss = train(model, train_loader, optimizer, criterion)
-            scheduler.step()
             all_loss[iter_] = loss
             all_accuracy[iter_] = accuracy
 
             # Frequency for Printing Accuracy and Loss
             if iter_ % args.print_freq == 0:
-                pbar.set_description(
+                # pbar.set_description(
+                pbar.write(
                     f'Train Epoch: {iter_}/{args.end_iter} Loss: {loss:.6f} Accuracy: {accuracy:.2f}% Best Accuracy: {best_accuracy:.2f}%')
                 # wandb.log(
                 #     {'Loss': loss, 'Accuracy': accuracy, 'Best Accuracy': best_accuracy})
-                wandb.log(
-                    {f'Pruning Iteration {_ite}/Loss': loss,
-                     f'Pruning Iteration {_ite}/Accuracy': accuracy,
-                     f'Pruning Iteration {_ite}/Best Accuracy': best_accuracy})
+                # wandb.log(
+                #     {f'Pruning Iteration {_ite}/Loss': loss,
+                #      f'Pruning Iteration {_ite}/Accuracy': accuracy,
+                #      f'Pruning Iteration {_ite}/Best Accuracy': best_accuracy})
 
         writer.add_scalar('Accuracy/test', best_accuracy, comp1)
         bestacc[_ite] = best_accuracy
@@ -290,8 +293,8 @@ def main(ITE=0):
 
     elapsed_time = datetime.now() - time
     print('Elapsed time: ', elapsed_time, 'minutes')
-    wandb.log({'elapsed_time': elapsed_time.seconds})
-    wandb.finish()
+    # wandb.log({'elapsed_time': elapsed_time.seconds})
+    # wandb.finish()
 
 
 # Function for Training
@@ -337,34 +340,28 @@ def test(model, test_loader, criterion):
 
 
 # Prune by Percentile module
-def prune_by_percentile(percent, resample=False, reinit=False, **kwargs):
+def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
     global step
     global mask
     global model
 
-    # Calculate percentile value
     step = 0
     for name, param in model.named_parameters():
 
-        # We do not prune bias term
         if 'weight' in name:
             if "fc.weight" in name:
-                continue
+                percentile_value = np.percentile(abs(param.data.cpu().numpy()), fc_percent)
+            else:
+                percentile_value = np.percentile(abs(param.data.cpu().numpy()), conv_percent)
 
             tensor = param.data.cpu().numpy()
-            alive = tensor[np.nonzero(tensor)]  # flattened array of nonzero values
-            percentile_value = np.percentile(abs(alive), percent)
-
-            # Convert Tensors to numpy and calculate
             weight_dev = param.device
             new_mask = np.where(abs(tensor) < percentile_value, 0, mask[step])
 
-            # Apply new weight and mask
             param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
             mask[step] = new_mask
             step += 1
     step = 0
-
 
 # Function to make an empty mask of the same size as the model
 def make_mask(model):
