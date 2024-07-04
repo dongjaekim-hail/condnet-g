@@ -108,6 +108,8 @@ class ResNet50(torch.nn.Module):
         self.device = device
 
     def forward(self, x, cond_drop=False, us=None, channels=None):
+        channels_cumsum = np.cumsum(channels)
+
         hs = [torch.flatten(F.interpolate(x, size=(7, 7)), 2).to(self.device)]
         if not cond_drop:
             x = self.conv1(x)
@@ -146,9 +148,10 @@ class ResNet50(torch.nn.Module):
             x = self.conv1(x)
             x = self.bn1(x)
             x = self.relu(x)
-            us_ = us[:, channels[0]:channels[0] + channels[1]]
-            x = x * us_
-            hs.append(x)
+            # CNN 에서는 입력채널은 하면 안될거같은데요ㅕ
+            # us_ = us[:, channels[0]:channels[0] + channels[1]]
+            # x = x * us_
+            hs.append(x) 
             x = self.max_pool(x)
             i = 0
             for layer in [self.layer1, self.layer2, self.layer3, self.layer4]:
@@ -157,14 +160,16 @@ class ResNet50(torch.nn.Module):
                     out = bottleneck.conv1(x)
                     out = bottleneck.bn1(out)
                     out = bottleneck.relu(out)
-                    us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    # us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    us_ = us[:, channels_cumsum[i + 1]:channels_cumsum[i + 2]]
                     out = out * us_
                     i += 1
                     hs.append(out)
                     out = bottleneck.conv2(out)
                     out = bottleneck.bn2(out)
                     out = bottleneck.relu(out)
-                    us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    # us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    us_ = us[:, channels_cumsum[i + 1]:channels_cumsum[i + 2]]
                     out = out * us_
                     i += 1
                     hs.append(out)
@@ -174,7 +179,8 @@ class ResNet50(torch.nn.Module):
                         residual = bottleneck.downsample(x)
                     out += residual
                     out = bottleneck.relu(out)
-                    us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    # us_ = us[:, channels[i + 1]:channels[i + 1] + channels[i + 2]]
+                    us_ = us[:, channels_cumsum[i + 1]:channels_cumsum[i + 2]]
                     out = out * us_
                     i += 1
                     hs.append(out)
@@ -251,6 +257,7 @@ class runtime_pruner(L.LightningModule):
     def __init__(self, resnet, gnn_policy, adj_, num_channels_ls, args, device):
         super().__init__()
         self.resnet = resnet
+        self.resnet.eval()
         self.gnn_policy = gnn_policy
         self.adj = adj_
         self.num_channels_ls = num_channels_ls
@@ -295,7 +302,6 @@ class runtime_pruner(L.LightningModule):
             y_batch = y[i:i + accum_batch_size]
             # torch.cuda.synchronize()
             # time_ = time.time()
-            self.resnet.eval()
             with torch.no_grad():
                 y_hat_surrogate, hs = self.resnet(x_batch)
                 acc_bf = accuracy(torch.argmax(y_hat_surrogate, dim=1), y_batch, task='multiclass', num_classes=1000)
@@ -306,16 +312,16 @@ class runtime_pruner(L.LightningModule):
             # self.resnet.train()
 
             outputs, hs = self.resnet(x_batch, cond_drop=True, us=us.detach(), channels=self.num_channels_ls)
-            # c = F.cross_entropy(outputs, y_batch)
+            c = F.cross_entropy(outputs, y_batch)
             try:
                 acc = accuracy(torch.argmax(outputs, dim=1), y_batch, task='multiclass', num_classes=1000)
             except:
                 print('')
-            L = c + self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
-                                     torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau), 2).mean())
-            L += self.lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
-                                         p.squeeze().var(axis=1).mean())
-            L = c + self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
+            # L = c + self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
+            #                          torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau), 2).mean())
+            # L += self.lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
+            #                              p.squeeze().var(axis=1).mean())
+            L = self.lambda_s * (torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau), 2).mean() +
                                      torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau), 2).mean())
             L += self.lambda_v * (-1) * (p.squeeze().var(axis=0).mean() +
                                          p.squeeze().var(axis=1).mean())
@@ -363,7 +369,7 @@ class runtime_pruner(L.LightningModule):
             x_batch = x[i:i + accum_batch_size]
             y_batch = y[i:i + accum_batch_size]
 
-            self.resnet.eval()
+            # self.resnet.eval()
             with torch.no_grad():
                 y_hat_surrogate, hs = self.resnet(x_batch)
                 acc_bf = accuracy(torch.argmax(y_hat_surrogate, dim=1), y_batch, task='multiclass', num_classes=1000)
@@ -630,6 +636,7 @@ def main():
     for param in resnet.parameters():
         param.requires_grad = False
 
+
     gnn_policy = Gnn(args.condnet_min_prob, args.condnet_max_prob, hidden_size=args.hidden_size, device=device).to(device)
     adj_, num_channels_ls = adj(resnet)
 
@@ -644,6 +651,7 @@ def main():
     #     check_val_every_n_epoch=2,
     #     logger=logger
     # )
+
     trainer = L.Trainer(
         max_epochs=args.max_epochs,
         precision=args.precision,
