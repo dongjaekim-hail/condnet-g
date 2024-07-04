@@ -618,7 +618,7 @@ def main():
                          config=args.__dict__)
 
     time = datetime.now()
-    dir2save = r'C:\Users\97dnd\anaconda3\envs\torch\pr\condnet-g\data'
+    dir2save = '/Users/dongjaekim/Documents/imagenet'
     data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE * args.accum_step, debug=args.debug)
 
     resnet = ResNet50(device)
@@ -633,9 +633,15 @@ def main():
 
     logger.watch(model, log_graph=False)
 
+    # trainer = L.Trainer(
+    #     max_epochs=args.max_epochs,
+    #     accelerator='gpu',
+    #     precision=args.precision,
+    #     check_val_every_n_epoch=2,
+    #     logger=logger
+    # )
     trainer = L.Trainer(
         max_epochs=args.max_epochs,
-        accelerator='gpu',
         precision=args.precision,
         check_val_every_n_epoch=2,
         logger=logger
