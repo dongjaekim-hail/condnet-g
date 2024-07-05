@@ -28,8 +28,13 @@ class Mlp(nn.Module):
     def forward(self, x, cond_drop=False, us=None):
         hs = [x]
         # flatten
-        len_in = 0
-        len_out = x.shape[1]
+        layer_cumsum = [0]
+        for layer in self.layers:
+            layer_cumsum.append(layer.in_features)
+
+        layer_cumsum = np.cumsum(layer_cumsum)
+
+        idx = 0
         if not cond_drop:
             for layer in self.layers:
                 x = layer(x)
@@ -44,12 +49,14 @@ class Mlp(nn.Module):
             for layer in self.layers:
                 us = us.squeeze()
                 len_out = layer.in_features
-                x = x * us[:,len_in:len_in+len_out] # where it cuts off [TODO]
+                x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
                 x = layer(x)
                 x = F.relu(x)
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
-                len_in = len_out
+
+                idx += 1
+
                 hs.append(x)
 
         # softmax

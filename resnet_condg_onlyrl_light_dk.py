@@ -148,9 +148,8 @@ class ResNet50(torch.nn.Module):
             x = self.conv1(x)
             x = self.bn1(x)
             x = self.relu(x)
-            # CNN 에서는 입력채널은 하면 안될거같은데요ㅕ
-            # us_ = us[:, channels[0]:channels[0] + channels[1]]
-            # x = x * us_
+            us_ = us[:, channels_cumsum[0]:channels_cumsum[1]]
+            x = x * us_
             hs.append(x) 
             x = self.max_pool(x)
             i = 0
@@ -628,7 +627,7 @@ def main():
                          config=args.__dict__)
 
     time = datetime.now()
-    dir2save = 'E:\imagenet-1k'
+    dir2save = 'D:\imagenet-1k'
     data_module = ImageNetDataModule(data_dir=dir2save, batch_size=args.BATCH_SIZE * args.accum_step, debug=args.debug)
 
     resnet = ResNet50(device)
