@@ -238,7 +238,7 @@ class SimpleCNN(L.LightningModule):
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
         self.current_iteration += 1
-        if self.current_iteration % self.total_iterations == 0 and self.current_iteration != 0:
+        if self.current_iteration % self.total_iterations == 0 and self.current_iteration != 0 and self.current_iteration != self.total_iterations * self.prune_iterations:
             print(f"Pruning at iteration {self.current_iteration} (Batch {batch_idx})")
             self.prune_and_reset()
 
