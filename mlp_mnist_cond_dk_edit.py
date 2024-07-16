@@ -13,6 +13,7 @@ from datetime import datetime
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
+import torch.nn.init as init
 
 
 class model_condnet(nn.Module):
@@ -85,31 +86,66 @@ class model_condnet(nn.Module):
         layer_masks = []
         x = x.view(-1, self.input_dim).to(self.device)
 
+        # param_min = 0
+        # param_max = 0
+        # # Initial check for NaNs in model parameters
+        # for name, param in self.named_parameters():
+        #     if torch.isnan(param).any():
+        #         print(f"NaN detected in {name} ")
+        #     if param_max < param.max():
+        #         param_max = param.max().item()
+        #     if param_min > param.min():
+        #         param_min = param.min().item()
+        # # print('param_min:', param_min, 'param_max', param_max)
 
         # for each layer
         h = x
         u = torch.ones(h.shape[0], h.shape[1]).to(self.device)
 
         for i in range(len(self.mlp)-1):
-            h_clone = h.clone()
-            p_i = self.policy_net[i][0](h_clone.detach())
-            # p_i = self.policy_net[i][0](h)
 
-            p_i = F.sigmoid(p_i)
+            # param_min = 0
+            # param_max = 0
+            # # Initial check for NaNs in model parameters
+            # for name, param in self.policy_net[i][0].named_parameters():
+            #     if torch.isnan(param).any():
+            #         print(f"NaN detected in {name}")
+            #     if param_max < param.max():
+            #         param_max = param.max().item()
+            #     if param_min > param.min():
+            #         param_min = param.min().item()
+            # # print('param_min:', param_min, 'param_max', param_max)
+
+
+            h_clone = h.clone()
+            p_is = self.policy_net[i][0](h_clone.detach())
+            # p_i = self.policy_net[i][0](h)
+            # Check for NaNs after first policy net layer
+            if torch.isnan(p_is).any():
+                print(f"NaN detected in policy_net[{i}][0] output")
+
+            p_i = F.sigmoid(p_is)
+
+            # Check for NaNs after sigmoid activation
+            if torch.isnan(p_i).any():
+                print(f"NaN detected after sigmoid(policy_net[{i}][0] output)")
+
             for j in range(1, len(self.policy_net[i])):
-                p_i = self.policy_net[i][j](p_i)
-                p_i = F.sigmoid(p_i)
+                p_is = self.policy_net[i][j](p_i)
+                p_i = F.sigmoid(p_is)
 
             # p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
             p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
 
-            print(p_i.max().item(), p_i.min().item())
-            invalid_values = p_i[(p_i < 0) | (p_i > 1)]
-            if invalid_values.numel() > 0:
-                print("Invalid values in p_i:", invalid_values)
+            if np.any(np.isnan(p_i.cpu().detach().numpy())):
+                print('wait a sec')
+
+            # # print(p_i.max().item(), p_i.min().item())
+            # invalid_values = p_i[(p_i < 0) | (p_i > 1)]
+            # if invalid_values.numel() > 0:
+            #     print("Invalid values in p_i:", invalid_values)
 
             u_i = torch.bernoulli(p_i).to(self.device)
-            print()
 
             # debug[TODO]
             # u_i = torch.ones(u_i.shape[0], u_i.shape[1])
@@ -146,14 +182,14 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=4)
+    args.add_argument('--lambda_s', type=float, default=10)
     args.add_argument('--lambda_v', type=float, default=0.5)
-    args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--lambda_l2', type=float, default=1e-5)
+    args.add_argument('--lambda_pg', type=float, default=1e-4)
     args.add_argument('--tau', type=float, default=0.3)
-    args.add_argument('--max_epochs', type=int, default=40)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--max_epochs', type=int, default=50)
+    args.add_argument('--condnet_min_prob', type=float, default=0.2)
+    args.add_argument('--condnet_max_prob', type=float, default=0.8)
     args.add_argument('--lr', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
@@ -174,15 +210,23 @@ def main():
         root="../data/mnist",
         train=True,
         download=True,
-        transform=transforms.ToTensor()
+        transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))  # 평균을 0.5로, 표준편차를 0.5로 하여 [-1, 1] 범위로 변환
+        ])
     )
+
 
     test_dataset = datasets.MNIST(
         root="../data/mnist",
         train=False,
         download=True,
-        transform=transforms.ToTensor()
+        transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))  # 평균을 0.5로, 표준편차를 0.5로 하여 [-1, 1] 범위로 변환
+        ])
     )
+
 
     train_loader = torch.utils.data.DataLoader(
         dataset=train_dataset,
@@ -276,6 +320,15 @@ def main():
             PG = lambda_pg * c * (-logp) + L
 
             PG.backward() # it needs to be checked [TODO]
+
+            # # gradient에 NaN 및 큰 값 체크
+            # for name, param in model.named_parameters():
+            #     if param.grad is not None:
+            #         if torch.isnan(param.grad).any():
+            #             print(f"{name}의 gradient에 NaN이 존재합니다.")
+            #         if torch.max(param.grad) > 1e2:  # 임계값을 조정하세요
+            #             print(f"{name}의 gradient가 너무 큽니다: {torch.max(param.grad).item()}")
+
             mlp_optimizer.step()
             policy_optimizer.step()
 
