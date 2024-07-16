@@ -100,8 +100,16 @@ class model_condnet(nn.Module):
                 p_i = self.policy_net[i][j](p_i)
                 p_i = F.sigmoid(p_i)
 
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
+            # p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
+            p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
+
+            print(p_i.max().item(), p_i.min().item())
+            invalid_values = p_i[(p_i < 0) | (p_i > 1)]
+            if invalid_values.numel() > 0:
+                print("Invalid values in p_i:", invalid_values)
+
             u_i = torch.bernoulli(p_i).to(self.device)
+            print()
 
             # debug[TODO]
             # u_i = torch.ones(u_i.shape[0], u_i.shape[1])
