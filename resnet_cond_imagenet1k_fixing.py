@@ -103,6 +103,11 @@ class model_condnet(nn.Module):
         self.policy_net.append(nn.Linear(256 * 7 * 7, 256 * 7 * 7))
         self.policy_net.append(nn.Linear(256 * 7 * 7, 256 * 7 * 7))
 
+        self.policy_net.append(nn.Linear(256 * 7 * 7, 512 * 7 * 7))
+        self.policy_net.append(nn.Linear(512 * 7 * 7, 512 * 7 * 7))
+        self.policy_net.append(nn.Linear(512 * 7 * 7, 512 * 7 * 7))
+        self.policy_net.append(nn.Linear(512 * 7 * 7, 512 * 7 * 7))
+
         self.policy_net.to(self.device)
 
         self.channels = self.resnet.get_output_channels()
@@ -158,141 +163,109 @@ class model_condnet(nn.Module):
         layer_masks.append(u_i)
 
         h = self.resnet.max_pool(h)
+        u = self.resnet.max_pool(u)
         # print(f"maxpool output size: {h.size()}")
 
         policy_index = 1
         # 각 레이어의 bottleneck 블록을 통과한 특징
         # for layer in [self.resnet.layer1, self.resnet.layer2, self.resnet.layer3, self.resnet.layer4]:
         for layer_idx, layer in enumerate([self.resnet.layer1, self.resnet.layer2, self.resnet.layer3, self.resnet.layer4]):
-            for bottleneck in layer:
+            for block_index, bottleneck in enumerate(layer):
                 residual = h
 
-                if layer_idx != 3:
-                    h_clone = h.clone()
-                    h_re = F.interpolate(h_clone, size=(7, 7))
-                    p_is = self.policy_net[i + 1](h_re.view(h_re.size(0), -1))
-                    if torch.isnan(p_is).any():
-                        print(f"NaN detected in policy_net[{i + 1}][0] output")
+                h_clone = h.clone()
+                h_re = F.interpolate(h_clone, size=(7, 7))
+                p_is = self.policy_net[i + 1](h_re.view(h_re.size(0), -1))
+                if torch.isnan(p_is).any():
+                    print(f"NaN detected in policy_net[{i + 1}][0] output")
 
-                    p_i = torch.sigmoid(p_is)
-                    if torch.isnan(p_i).any():
-                        print(f"NaN detected after sigmoid(policy_net[{i + 1}][0] output)")
+                p_i = torch.sigmoid(p_is)
+                if torch.isnan(p_i).any():
+                    print(f"NaN detected after sigmoid(policy_net[{i + 1}][0] output)")
 
-                    p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
-                    if np.any(np.isnan(p_i.cpu().detach().numpy())):
-                        print('wait a sec')
+                p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
+                if np.any(np.isnan(p_i.cpu().detach().numpy())):
+                    print('wait a sec')
 
-                    u_i = torch.bernoulli(p_i).to(self.device)
+                u_i = torch.bernoulli(p_i).to(self.device)
 
-                    if u_i.sum() == 0:
-                        idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                        u_i[idx] = 1
+                if u_i.sum() == 0:
+                    idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
+                    u_i[idx] = 1
 
-                    sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
+                sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
 
+                if layer_idx == 0 and block_index == 0:  # layer1의 첫 번째 블록
+                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+                elif block_index == 0 and layer_idx in [1, 2, 3]:  # layer2, layer3, layer4의 첫 번째 블록
                     u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2)//2, h.size(3)//2).to(self.device)
-                    u_i = u_i[:, channels_cumsum[i + 1]:channels_cumsum[i + 2], :, :]  # 채널을 맞추기 위해 차원을 추가
-                    out_next = F.relu(bottleneck.bn1(bottleneck.conv1(h * u))) * u_i
-                    out = out_next
-                    u = u_i
+                else:  # 나머지 블록
+                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+                u_i = u_i[:, channels_cumsum[i + 1]:channels_cumsum[i + 2], :, :]  # 채널을 맞추기 위해 차원을 추가
+                out_next = F.relu(bottleneck.bn1(bottleneck.conv1(h * u))) * u_i
+                out = out_next
+                u = u_i
 
-                    # if u_i is in shape of (B, feature numbers)
-                    # u_i_expaneded = u_i.unsqueeze(-1).unsqueeze(-1).expand(B,C,H,W).to(device)
-                    # h = h*u_i_expaneded
-                    i += 1
+                # if u_i is in shape of (B, feature numbers)
+                # u_i_expaneded = u_i.unsqueeze(-1).unsqueeze(-1).expand(B,C,H,W).to(device)
+                # h = h*u_i_expaneded
+                i += 1
 
-                    policies.append(p_i)
-                    sample_probs.append(sampling_prob)
-                    layer_masks.append(u_i)
+                policies.append(p_i)
+                sample_probs.append(sampling_prob)
+                layer_masks.append(u_i)
 
-                    out_clone = out.clone()
-                    out_re = F.interpolate(out_clone, size=(7, 7))
-                    p_is = self.policy_net[i + 1](out_re.view(out_re.size(0), -1))
-                    if torch.isnan(p_is).any():
-                        print(f"NaN detected in policy_net[{i + 1}][0] output")
+                out_clone = out.clone()
+                out_re = F.interpolate(out_clone, size=(7, 7))
+                p_is = self.policy_net[i + 1](out_re.view(out_re.size(0), -1))
+                if torch.isnan(p_is).any():
+                    print(f"NaN detected in policy_net[{i + 1}][0] output")
 
-                    p_i = torch.sigmoid(p_is)
-                    if torch.isnan(p_i).any():
-                        print(f"NaN detected after sigmoid(policy_net[{i + 1}][0] output)")
+                p_i = torch.sigmoid(p_is)
+                if torch.isnan(p_i).any():
+                    print(f"NaN detected after sigmoid(policy_net[{i + 1}][0] output)")
 
-                    p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
-                    if np.any(np.isnan(p_i.cpu().detach().numpy())):
-                        print('wait a sec')
+                p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
+                if np.any(np.isnan(p_i.cpu().detach().numpy())):
+                    print('wait a sec')
 
-                    u_i = torch.bernoulli(p_i).to(self.device)
+                u_i = torch.bernoulli(p_i).to(self.device)
 
-                    if u_i.sum() == 0:
-                        idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                        u_i[idx] = 1
+                if u_i.sum() == 0:
+                    idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
+                    u_i[idx] = 1
 
-                    sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
+                sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
 
-                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2)//2, h.size(3)//2).to(self.device)
-                    u_i = u_i[:, channels_cumsum[i + 1]:channels_cumsum[i + 2], :, :]  # 채널을 맞추기 위해 차원을 추가
+                if layer_idx == 0 and block_index == 0:  # layer1의 첫 번째 블록
+                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+                elif block_index == 0 and layer_idx in [1, 2, 3]:  # layer2, layer3, layer4의 첫 번째 블록
+                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2) // 2, h.size(3) // 2).to(self.device)
+                else:  # 나머지 블록
+                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
 
+                if layer_idx == 3 and block_index == 1:  # Layer4의 두 번째 BasicBlock
                     out = bottleneck.bn2(bottleneck.conv2(out))
-                    # print(f"layer bottleneck.conv3 output size: {out.size()}")
+                    if bottleneck.downsample is not None:
+                        residual = bottleneck.downsample(h)
+                    out += residual
+                    out = bottleneck.relu(out)
+                    h = out
+                else:
+                    u_i = u_i[:, channels_cumsum[i + 1]:channels_cumsum[i + 2], :, :]  # 채널을 맞추기 위해 차원을 추가
+                    out = bottleneck.bn2(bottleneck.conv2(out))
                     if bottleneck.downsample is not None:
                         residual = bottleneck.downsample(h)
                     out += residual
                     out_next = bottleneck.relu(out * u) * u_i
                     out = out_next
                     u = u_i
-
-                    # if u_i is in shape of (B, feature numbers)
-                    # u_i_expaneded = u_i.unsqueeze(-1).unsqueeze(-1).expand(B,C,H,W).to(device)
-                    # h = h*u_i_expaneded
                     i += 1
 
                     policies.append(p_i)
                     sample_probs.append(sampling_prob)
                     layer_masks.append(u_i)
 
-                    h = out
-
-                else:
-                    # layer4의 conv1 처리
-                    h_clone = h.clone()
-                    h_re = F.interpolate(h_clone, size=(7, 7))
-                    p_is = self.policy_net[i + 1](h_re.view(h_re.size(0), -1))
-                    if torch.isnan(p_is).any():
-                        print(f"NaN detected in policy_net[{i + 1}][0] output")
-
-                    p_i = torch.sigmoid(p_is)
-                    if torch.isnan(p_i).any():
-                        print(f"NaN detected after sigmoid(policy_net[{i + 1}][0] output)")
-
-                    p_i = torch.clamp(p_i, min=self.condnet_min_prob, max=self.condnet_max_prob)
-                    if np.any(np.isnan(p_i.cpu().detach().numpy())):
-                        print('wait a sec')
-
-                    u_i = torch.bernoulli(p_i).to(self.device)
-
-                    if u_i.sum() == 0:
-                        idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                        u_i[idx] = 1
-
-                    sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-
-                    u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2) // 2, h.size(3) // 2).to(self.device)
-                    u_i = u_i[:, channels_cumsum[i + 1]:channels_cumsum[i + 2], :, :]  # 채널을 맞추기 위해 차원을 추가
-
-                    out_next = F.relu(bottleneck.bn1(bottleneck.conv1(h * u))) * u_i
-                    out = out_next
-                    u = u_i
-
-                    policies.append(p_i)
-                    sample_probs.append(sampling_prob)
-                    layer_masks.append(u_i)
-
-                    i += 1
-
-                    # layer4의 conv2 처리
-                    out = bottleneck.bn2(bottleneck.conv2(out))
-                    if bottleneck.downsample is not None:
-                        residual = bottleneck.downsample(h)
-                    out += residual
-                    out = bottleneck.relu(out)
                     h = out
 
         h = self.resnet.avg_pool(h)
@@ -317,7 +290,7 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=8)
+    args.add_argument('--BATCH_SIZE', type=int, default=2)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
     args.add_argument('--accum-step', type=int, default=32)
@@ -446,16 +419,22 @@ def main():
             c = C(outputs, labels.to(model.device))
             # Compute the regularization loss L
 
-            L = c + lambda_s * (torch.pow(torch.stack(policies).mean(axis=1) - torch.tensor(tau).to(model.device), 2).mean() +
-                                torch.pow(torch.stack(policies).mean(axis=2) - torch.tensor(tau).to(model.device), 2).mean())
+            policy_flat = torch.cat(policies, dim=1)
+            Lb_ = torch.pow(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), 2).sqrt().sum()
+            Le_ = torch.pow(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), 2).sqrt().mean()
 
-            L += lambda_v * (-1) * (torch.stack(policies).to('cpu').var(axis=1).mean() +
-                                    torch.stack(policies).to('cpu').var(axis=2).mean())
+            Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0), 2).mean(axis=0).sum()
 
+            L = c + lambda_s * (Lb_ + Le_)
+            # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
+            #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
+            L += lambda_v * (-1) * (Lv_)
+            # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
+            #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
             # Compute the policy gradient (PG) loss
-            logp = torch.log(torch.cat(policies)).sum(axis=1).mean()
+            logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
 
             # PG.backward() # it needs to be checked [TODO]
@@ -560,19 +539,24 @@ def main():
                 y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
 
                 c = C(outputs, labels.to(model.device))
-
                 # Compute the regularization loss L
 
-                L = c + lambda_s * (torch.pow(torch.stack(policies).mean(axis=1) - torch.tensor(tau).to(model.device), 2).mean() +
-                                    torch.pow(torch.stack(policies).mean(axis=2) - torch.tensor(tau).to(model.device), 2).mean())
+                policy_flat = torch.cat(policies, dim=1)
+                Lb_ = torch.pow(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), 2).sqrt().sum()
+                Le_ = torch.pow(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), 2).sqrt().mean()
 
-                L += lambda_v * (-1) * (torch.stack(policies).var(axis=1).mean() +
-                                        torch.stack(policies).var(axis=2).mean())
+                Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0), 2).mean(axis=0).sum()
 
+                L = c + lambda_s * (Lb_ + Le_)
+                # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
+                #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
+                L += lambda_v * (-1) * (Lv_)
+                # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
+                #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
                 # Compute the policy gradient (PG) loss
-                logp = torch.log(torch.cat(policies)).sum(axis=1).mean()
+                logp = torch.log(policy_flat).sum(axis=1).mean()
                 PG = lambda_pg * c * (-logp) + L
 
                 # wandb log test/batch
