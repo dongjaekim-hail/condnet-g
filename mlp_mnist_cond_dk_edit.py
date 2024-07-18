@@ -4,7 +4,8 @@ import numpy as np
 import torch.optim as optim
 import torchvision
 from torchvision import transforms, datasets # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
-
+from tqdm import tqdm
+from tqdm import trange
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
@@ -191,7 +192,7 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.2)
     args.add_argument('--condnet_max_prob', type=float, default=0.8)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=500)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
     args = args.parse_args()
@@ -239,7 +240,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet",
+    wandb.init(project="condgnet_dk_edit",
                 config=args.__dict__,
                 name='cond_lastchance1024' + '_tau=' + str(args.tau)
                 )
@@ -272,7 +273,7 @@ def main():
                             momentum=0.9, weight_decay=lambda_l2)
 
     # run for 50 epochs
-    for epoch in range(max_epochs):
+    for epoch in trange(max_epochs):
 
         model.train()
         costs = 0
@@ -281,7 +282,7 @@ def main():
 
         bn = 0
         # run for each batch
-        for i, data in enumerate(train_loader, 0):
+        for i, data in enumerate(tqdm(train_loader, 0)):
             mlp_optimizer.zero_grad()
             policy_optimizer.zero_grad()
 
@@ -419,7 +420,7 @@ def main():
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
             wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn, 'test/epoch_tau': taus / bn })
-        torch.save(model.state_dict(), './cond1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(model.state_dict(), './cond_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
     wandb.finish()
 if __name__=='__main__':
     main()
