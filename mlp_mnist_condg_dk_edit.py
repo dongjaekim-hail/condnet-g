@@ -172,14 +172,14 @@ def main():
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
     args.add_argument('--lambda_s', type=float, default=10)
-    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_v', type=float, default=0.1)
     args.add_argument('--lambda_l2', type=float, default=1e-5)
-    args.add_argument('--lambda_pg', type=float, default=1e-4)
-    args.add_argument('--tau', type=float, default=0.3)
-    args.add_argument('--max_epochs', type=int, default=50)
-    args.add_argument('--condnet_min_prob', type=float, default=0.2)
-    args.add_argument('--condnet_max_prob', type=float, default=0.8)
-    args.add_argument('--learning_rate', type=float, default=0.1)
+    args.add_argument('--lambda_pg', type=float, default=1e-2)
+    args.add_argument('--tau', type=float, default=0.6)
+    args.add_argument('--max_epochs', type=int, default=30)
+    args.add_argument('--condnet_min_prob', type=float, default=0.1)
+    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--lr', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=500)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
@@ -190,7 +190,7 @@ def main():
     lambda_l2 = args.lambda_l2
     lambda_pg = args.lambda_pg
     tau = args.tau
-    learning_rate = args.learning_rate
+    learning_rate = args.lr
     max_epochs = args.max_epochs
     BATCH_SIZE = args.BATCH_SIZE
     condnet_min_prob = args.condnet_min_prob
