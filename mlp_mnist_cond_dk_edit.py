@@ -318,12 +318,12 @@ def main():
                  # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
                  #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
-            ifzero = []
-            for l in range(len(layer_masks)):
-                ifzero.append(np.any(layer_masks[l].cpu().detach().numpy().sum(axis=1)==0))
-            if np.any(ifzero):
-                print(ifzero)
-                print('waitwaitwait!!')
+            # ifzero = []
+            # for l in range(len(layer_masks)):
+            #     ifzero.append(np.any(layer_masks[l].cpu().detach().numpy().sum(axis=1)==0))
+            # if np.any(ifzero):
+            #     print(ifzero)
+            #     print('waitwaitwait!!')
 
 
             # Compute the policy gradient (PG) loss
