@@ -241,9 +241,9 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet_dk_edit",
+    wandb.init(project="condgnet_edit",
                 config=args.__dict__,
-                name='cond_lastchance1024' + '_tau=' + str(args.tau)
+                name='cond_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     # create model

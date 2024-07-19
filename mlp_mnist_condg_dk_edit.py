@@ -37,10 +37,10 @@ class Mlp(nn.Module):
         if not cond_drop:
             for i, layer in enumerate(self.layers):
                 x = layer(x)
-                x = F.relu(x)
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
                 if i != len(self.layers) - 1:
+                    x = F.relu(x)
                     hs.append(x)
         else:
             if us is None:
@@ -55,7 +55,8 @@ class Mlp(nn.Module):
                     x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                     x = layer(x)
                     idx += 1
-                x = F.relu(x)
+                if i != len(self.layers) - 1:
+                    x = F.relu(x)
                 hs.append(x)
 
         # softmax
@@ -233,9 +234,9 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet_dk_edit",
+    wandb.init(project="condgnet_edit",
                 config=args.__dict__,
-                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
