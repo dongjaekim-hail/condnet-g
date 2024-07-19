@@ -4,7 +4,8 @@ import numpy as np
 import torch.optim as optim
 import torchvision
 from torchvision import transforms, datasets # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
-
+from tqdm import tqdm
+from tqdm import trange
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
@@ -167,6 +168,7 @@ class model_condnet(nn.Module):
             sample_probs.append(sampling_prob)
             layer_masks.append(u_i)
 
+
         # last layer just go without dynamic sampling
         h = self.mlp[-1](h)
         h = F.softmax(h, dim=1)
@@ -182,16 +184,16 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=10)
-    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_s', type=float, default=0.01)
+    args.add_argument('--lambda_v', type=float, default=0.1)
     args.add_argument('--lambda_l2', type=float, default=1e-5)
-    args.add_argument('--lambda_pg', type=float, default=1e-4)
-    args.add_argument('--tau', type=float, default=0.3)
-    args.add_argument('--max_epochs', type=int, default=50)
-    args.add_argument('--condnet_min_prob', type=float, default=0.2)
-    args.add_argument('--condnet_max_prob', type=float, default=0.8)
+    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--tau', type=float, default=0.6)
+    args.add_argument('--max_epochs', type=int, default=30)
+    args.add_argument('--condnet_min_prob', type=float, default=0.1)
+    args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=500)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
     args = args.parse_args()
@@ -239,9 +241,9 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet",
+    wandb.init(project="condgnet_edit",
                 config=args.__dict__,
-                name='cond_lastchance1024' + '_tau=' + str(args.tau)
+                name='cond_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     # create model
@@ -272,16 +274,17 @@ def main():
                             momentum=0.9, weight_decay=lambda_l2)
 
     # run for 50 epochs
-    for epoch in range(max_epochs):
+    for epoch in trange(max_epochs):
 
         model.train()
         costs = 0
         accs = 0
         PGs = 0
+        taus = 0
 
         bn = 0
         # run for each batch
-        for i, data in enumerate(train_loader, 0):
+        for i, data in enumerate(tqdm(train_loader, 0)):
             mlp_optimizer.zero_grad()
             policy_optimizer.zero_grad()
 
@@ -315,6 +318,14 @@ def main():
                  # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
                  #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
+            # ifzero = []
+            # for l in range(len(layer_masks)):
+            #     ifzero.append(np.any(layer_masks[l].cpu().detach().numpy().sum(axis=1)==0))
+            # if np.any(ifzero):
+            #     print(ifzero)
+            #     print('waitwaitwait!!')
+
+
             # Compute the policy gradient (PG) loss
             logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
@@ -341,15 +352,18 @@ def main():
             accs += acc
             PGs += PG.to('cpu').item()
 
+            us = torch.cat(layer_masks, dim=1)
+            tau_ = us.mean().detach().item()
+            taus += tau_
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau_})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, np.mean([tau_.mean().item() for tau_ in layer_masks])
-                                                                                                     ))
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, tau_))
+
 
         # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau, 'train/epoch_PG': PGs/bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus/bn, 'train/epoch_PG': PGs/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -413,13 +427,14 @@ def main():
                 accs += acc
                 PGs += PG.to('cpu').item()
 
-                tau_ = (policy_flat).mean().detach().item()
+                us = torch.cat(layer_masks, dim=1)
+                tau_ = us.mean().detach().item()
                 taus += tau_
             #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
             wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn, 'test/epoch_tau': taus / bn })
-        torch.save(model.state_dict(), './cond1024_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(model.state_dict(), './cond_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
     wandb.finish()
 if __name__=='__main__':
     main()
