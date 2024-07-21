@@ -184,7 +184,7 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=0.01)
+    args.add_argument('--lambda_s', type=float, default=1)
     args.add_argument('--lambda_v', type=float, default=0.1)
     args.add_argument('--lambda_l2', type=float, default=1e-5)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
@@ -241,7 +241,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet_edit",
+    wandb.init(project="condgnet_dk_edit2",
                 config=args.__dict__,
                 name='cond_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
@@ -281,7 +281,7 @@ def main():
         accs = 0
         PGs = 0
         taus = 0
-
+        Ls = 0
         bn = 0
         # run for each batch
         for i, data in enumerate(tqdm(train_loader, 0)):
@@ -314,7 +314,7 @@ def main():
                 # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
                 #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
-            L += lambda_v * (-1) * (Lv_)
+            L += lambda_v * (Lv_)
                  # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
                  #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
@@ -329,6 +329,8 @@ def main():
             # Compute the policy gradient (PG) loss
             logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
+
+            gradient = (c*(-logp)).item()
 
             PG.backward() # it needs to be checked [TODO]
 
@@ -346,6 +348,7 @@ def main():
             # calculate accuracy
             pred = torch.argmax(outputs.to('cpu'), dim=1)
             acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+            accbf = acc
 
             # addup loss and acc
             costs += c.to('cpu').item()
@@ -355,15 +358,16 @@ def main():
             us = torch.cat(layer_masks, dim=1)
             tau_ = us.mean().detach().item()
             taus += tau_
+            Ls += L.to('cpu').item()
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau_})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau_, 'train/batch_loss': L.item()})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, tau_))
+            print('Epoch: {}, Batch: {}, Cost: {:.4f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}, Lb: {:.3f}, Le: {:.3f}, Lv: {:.8f}, gradient: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
 
 
         # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus/bn, 'train/epoch_PG': PGs/bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus/bn, 'train/epoch_PG': PGs/bn, 'train/epoch_L': Ls/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -378,6 +382,7 @@ def main():
             acc = 0
             bn = 0
             taus = 0
+            Ls = 0
             for i, data in enumerate(test_loader, 0):
                 bn += 1
                 # get batch
@@ -426,6 +431,7 @@ def main():
                 costs += c.to('cpu').item()
                 accs += acc
                 PGs += PG.to('cpu').item()
+                Ls += L.to('cpu').item()
 
                 us = torch.cat(layer_masks, dim=1)
                 tau_ = us.mean().detach().item()
@@ -433,7 +439,7 @@ def main():
             #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
-            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_pg': PGs / bn, 'test/epoch_tau': taus / bn })
+            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn})
         torch.save(model.state_dict(), './cond_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
     wandb.finish()
 if __name__=='__main__':
