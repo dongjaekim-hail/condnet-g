@@ -10,6 +10,7 @@ from torch_geometric.nn import DenseSAGEConv
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
+from tqdm import tqdm, trange
 
 from datetime import datetime
 
@@ -31,32 +32,31 @@ class Mlp(nn.Module):
         layer_cumsum = [0]
         for layer in self.layers:
             layer_cumsum.append(layer.in_features)
-
         layer_cumsum = np.cumsum(layer_cumsum)
 
         idx = 0
         if not cond_drop:
-            for layer in self.layers:
-                x = layer(x)
-                x = F.sigmoid(x)
-                # dropout
-                # x = nn.Dropout(p=0.3)(x)
-                hs.append(x)
-        else:
-            if us is None:
-                raise ValueError('u should be given')
-            # conditional activation
-            for layer in self.layers:
-                us = us.squeeze()
-                len_out = layer.in_features
-                x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
+            for i, layer in enumerate(self.layers):
                 x = layer(x)
                 x = F.relu(x)
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
-
-                idx += 1
-
+                if i != len(self.layers) - 1:
+                    hs.append(x)
+        else:
+            if us is None:
+                raise ValueError('us should be given')
+            # conditional activation
+            for i, layer in enumerate(self.layers):
+                us = us.squeeze()
+                if i == 0:
+                    # 첫 번째 레이어의 경우 마스킹을 적용하지 않음
+                    x = layer(x)
+                else:
+                    x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                    x = layer(x)
+                    idx += 1
+                x = F.relu(x)
                 hs.append(x)
 
         # softmax
@@ -71,6 +71,7 @@ class Gnn(nn.Module):
         self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
         self.fc1 = nn.Linear(hidden_size, 1)
         # self.fc2 = nn.Linear(64,1, bias=False)
+        self.bn = nn.BatchNorm1d(1552)
         self.minprob = minprob
         self.maxprob = maxprob
 
@@ -80,16 +81,36 @@ class Gnn(nn.Module):
         batch_adj = batch_adj.to(device)
 
         hs_0 = hs.unsqueeze(-1)
+        hs = self.conv1(hs_0, batch_adj)
+        # check if hs contains nan
+        if torch.isnan(hs).any():
+            print('nan')
+            # check if parameters in conv1 contains nan
+            for param in self.conv1.parameters():
+                if torch.isnan(param).any():
+                    print('nan in conv1')
+        hs = F.tanh(hs)
+        hs = F.tanh(self.conv2(hs, batch_adj))
+        hs = self.conv2(hs, batch_adj)
+        hs = F.tanh(hs)
 
-        hs = F.sigmoid(self.conv1(hs_0, batch_adj))
-        hs = F.sigmoid(self.conv2(hs, batch_adj))
-        hs = F.sigmoid(self.conv3(hs, batch_adj))
+        hs = self.conv3(hs, batch_adj)
+        # check if hs contains nan
+        if torch.isnan(hs).any():
+            print('nan')
+            # check if parameters in conv3 contains nan
+            for param in self.conv3.parameters():
+                if torch.isnan(param).any():
+                    print('nan in conv3')
+        hs = F.tanh(hs)
         hs_conv = hs
         hs = self.fc1(hs)
+        hs = F.tanh(hs)
+        hs = self.bn(hs.squeeze())
         # hs = self.fc2(hs)
         p = F.sigmoid(hs)
         # bernoulli sampling
-        p = p * (self.maxprob - self.minprob) + self.minprob
+        p = torch.clamp(p, min=self.minprob, max=self.maxprob)
         u = torch.bernoulli(p).to(device) # [TODO] Error : probability -> not a number(nan), p is not in range of 0 to 1
 
         return u, p
@@ -127,7 +148,7 @@ class Condnet_model(nn.Module):
     #     return y, p, hs, u
 
 
-def adj(model, bidirect = True, last_layer = True, edge2itself = True):
+def adj(model, bidirect = True, last_layer = False, edge2itself = True):
     if last_layer:
         num_nodes = sum([layer.in_features for layer in model.layers]) + model.layers[-1].out_features
         nl = len(model.layers)
@@ -172,18 +193,18 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=4)
-    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_s', type=float, default=5)
+    args.add_argument('--lambda_v', type=float, default=1e-3)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.3)
-    args.add_argument('--max_epochs', type=int, default=40)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--tau', type=float, default=0.6)
+    args.add_argument('--max_epochs', type=int, default=100)
+    args.add_argument('--condnet_min_prob', type=float, default=1e-3)
+    args.add_argument('--condnet_max_prob', type=float, default=1-1e-3)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=256)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -236,7 +257,7 @@ def main():
 
     wandb.init(project="condgnet_dk_edit2",
                 config=args.__dict__,
-                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='condG2_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -246,9 +267,14 @@ def main():
                             momentum=0.9, weight_decay=lambda_l2)
     adj_, nodes_ = adj(mlp_model)
 
+    layer_cumsum = [0]
+    for layer in mlp_model.layers:
+        layer_cumsum.append(layer.in_features)
+    layer_cumsum = np.cumsum(layer_cumsum)
+
     mlp_model.train()
     # run for 50 epochs
-    for epoch in range(max_epochs):
+    for epoch in trange(max_epochs):
         bn =0
         costs = 0
         accs = 0
@@ -263,7 +289,7 @@ def main():
         mlp_model.train()
 
         # run for each batch
-        for i, data in enumerate(train_loader, 0):
+        for i, data in enumerate(tqdm(train_loader, 0)):
 
             if args.compact:
                 if i>50:
@@ -292,7 +318,6 @@ def main():
             us, p = gnn_policy(hs, adj_)  # run gnn
             outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
-
             # make labels one hot vector
             y_one_hot = torch.zeros(labels.shape[0], 10)
             y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
@@ -300,21 +325,37 @@ def main():
             c = C(outputs, labels.to(device))
             # Compute the regularization loss L
 
-            Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean()
-            Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean()
+            policy_flat = p[:, layer_cumsum[1]:].squeeze()
+
+            # Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(device),2).sqrt().sum()
+            # Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(device),2).sqrt().mean()
+
+            Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
+            Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2)/len(policy_flat)
 
             L = c + lambda_s * (Lb_ + Le_)
 
-            Lv_ = (-1)* (p.squeeze().var(axis=0).mean() + p.squeeze().var(axis=1).mean())
+            # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).sqrt().mean(axis=0).sum()
+            L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
+            # if L_var is full of zeros, then make L_var small number
+            # Create a mask to identify zero elements in L_var
+            zero_mask = (L_var == 0)
+
+            # Add a small number to the elements identified by the mask
+            L_var = L_var + 1e-6 * zero_mask.float()
+
+            Lv_ = -torch.log(L_var).sum()
 
             L += lambda_v * Lv_
 
 
 
             # Compute the policy gradient (PG) loss
-            logp = torch.log(p.squeeze()).sum(axis=1).mean()
+            logp = torch.log(policy_flat.squeeze()).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
             # PG = lambda_pg * c * (-logp) + L
+
+            gradient = (c*(-logp)).item()
 
             PG.backward() # it needs to be checked [TODO]
             mlp_optimizer.step()
@@ -339,13 +380,13 @@ def main():
             tau_ = us.mean().detach().item()
             taus += tau_
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_, 'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_, 'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_, 'train/batch_gradient': gradient})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf,tau_ ))
+            print('Epoch: {}, Batch: {}, Cost: {:.4f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}, Lb: {:.3f}, Le: {:.3f}, Lv: {:.8f}, gradient: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
 
         # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn, 'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs/bn, 'train/epoch_PG': Ls/bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn, 'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs/bn, 'train/epoch_L': Ls/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -366,13 +407,18 @@ def main():
             num_iteration = 0
             taus = 0
             Ls = 0
+            gradients = 0
+            Lb_s = 0
+            Le_s = 0
+            Lv_s = 0
+
             us = torch.zeros((1562, 1562))
 
             gnn_policy.train()
             mlp_model.train()
 
             # run for each batch
-            for i, data in enumerate(test_loader, 0):
+            for i, data in enumerate(tqdm(test_loader, 0)):
 
                 bn += 1
                 # get batch
@@ -398,19 +444,38 @@ def main():
                 y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
 
                 c = C(outputs, labels.to(device))
-                # Compute the regularization loss L
 
-                Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean()
-                Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean()
+                policy_flat = p[:, layer_cumsum[1]:].squeeze()
+
+                # Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(device),2).sqrt().sum()
+                # Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(device),2).sqrt().mean()
+
+                Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
+                Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2)/len(policy_flat)
 
                 L = c + lambda_s * (Lb_ + Le_)
 
-                Lv_ = (-1) * (p.squeeze().var(axis=0).mean() + p.squeeze().var(axis=1).mean())
+                # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).sqrt().mean(axis=0).sum()
+                L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
+                # if L_var is full of zeros, then make L_var small number
+                # Create a mask to identify zero elements in L_var
+                zero_mask = (L_var == 0)
+
+                # Add a small number to the elements identified by the mask
+                L_var = L_var + 1e-6 * zero_mask.float()
+
+                Lv_ = -torch.log(L_var).sum()
+
                 L += lambda_v * Lv_
 
+
+
                 # Compute the policy gradient (PG) loss
-                logp = torch.log(p.squeeze()).sum(axis=1).mean()
+                logp = torch.log(policy_flat.squeeze()).sum(axis=1).mean()
                 PG = lambda_pg * c * (-logp) + L
+                # PG = lambda_pg * c * (-logp) + L
+
+                gradient = (c*(-logp)).item()
 
                 # calculate accuracy
                 pred = torch.argmax(outputs.to('cpu'), dim=1)
@@ -424,19 +489,22 @@ def main():
                 accsbf += accbf
                 PGs += PG.to('cpu').item()
                 Ls += L.to('cpu').item()
+                Lb_s += Lb_.to('cpu').item()
+                Le_s += Le_.to('cpu').item()
+                Lv_s += Lv_.to('cpu').item()
+                gradients += gradient
 
                 tau_ = us.mean().detach().item()
                 taus += tau_
 
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
-                       'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn})
+                       'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn, 'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_gradient': gradients / bn})
         # save model
-        torch.save(mlp_model.state_dict(), './mlp_model_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
-        torch.save(gnn_policy.state_dict(), './gnn_policy_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(mlp_model.state_dict(), './mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+        torch.save(gnn_policy.state_dict(), './gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
 
     wandb.finish()
 
 if __name__=='__main__':
     main()
-

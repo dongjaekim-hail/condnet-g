@@ -193,7 +193,7 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=1)
+    args.add_argument('--lambda_s', type=float, default=5)
     args.add_argument('--lambda_v', type=float, default=1e-2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
@@ -202,7 +202,7 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1-1e-3)
     args.add_argument('--learning_rate', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=256)
     args = args.parse_args()
@@ -327,23 +327,29 @@ def main():
 
             policy_flat = p[:, layer_cumsum[1]:].squeeze()
 
-            # Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(device),2).sqrt().sum()
-            # Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(device),2).sqrt().mean()
+            # # Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(device),2).sqrt().sum()
+            # # Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(device),2).sqrt().mean()
+            # Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
+            # Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2).mean()
+            #
+            # L = c + lambda_s * (Lb_ + Le_)
+            #
+            # L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
+            # zero_mask = (L_var == 0)
+            #
+            # # Add a small number to the elements identified by the mask
+            # L_var = L_var + 1e-6 * zero_mask.float()
+            #
+            # Lv_ = -torch.log(L_var).sum()
+
+
             Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
-            Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2).mean()
+            Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2)/len(policy_flat)
 
             L = c + lambda_s * (Lb_ + Le_)
 
-            # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).sqrt().mean(axis=0).sum()
-            L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
-            # if L_var is full of zeros, then make L_var small number
-            # Create a mask to identify zero elements in L_var
-            zero_mask = (L_var == 0)
-
-            # Add a small number to the elements identified by the mask
-            L_var = L_var + 1e-6 * zero_mask.float()
-
-            Lv_ = -torch.log(L_var).sum()
+            # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
+            Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
 
             L += lambda_v * Lv_
 
@@ -379,7 +385,7 @@ def main():
             tau_ = us.mean().detach().item()
             taus += tau_
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_, 'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_, 'train/batch_gradient': gradient})
 
             # print PG.item(), and acc with name
             print('Epoch: {}, Batch: {}, Cost: {:.4f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}, Lb: {:.3f}, Le: {:.3f}, Lv: {:.8f}, gradient: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
@@ -448,23 +454,16 @@ def main():
 
                 # Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(device),2).sqrt().sum()
                 # Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(device),2).sqrt().mean()
+
                 Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
-                Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2).mean()
+                Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2)/len(policy_flat)
 
                 L = c + lambda_s * (Lb_ + Le_)
 
                 # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).sqrt().mean(axis=0).sum()
-                L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
-                # if L_var is full of zeros, then make L_var small number
-                # Create a mask to identify zero elements in L_var
-                zero_mask = (L_var == 0)
-
-                # Add a small number to the elements identified by the mask
-                L_var = L_var + 1e-6 * zero_mask.float()
+                Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
 
                 L += lambda_v * Lv_
-
-
 
                 # Compute the policy gradient (PG) loss
                 logp = torch.log(policy_flat.squeeze()).sum(axis=1).mean()
