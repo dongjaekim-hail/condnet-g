@@ -91,6 +91,8 @@ class Gnn(nn.Module):
         # bernoulli sampling
         p = p * (self.maxprob - self.minprob) + self.minprob
         u = torch.bernoulli(p).to(device) # [TODO] Error : probability -> not a number(nan), p is not in range of 0 to 1
+        # Apply Gumbel-Softmax
+        u = F.gumbel_softmax(hs.unsqueeze(-1), tau=1, hard=True)
 
         return u, p
 
@@ -300,20 +302,20 @@ def main():
             c = C(outputs, labels.to(device))
             # Compute the regularization loss L
 
-            Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean()
-            Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean()
+            Lb_ = torch.pow(us.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean()
+            Le_ = torch.pow(us.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean()
 
             L = c + lambda_s * (Lb_ + Le_)
 
             # Lv_ = (-1)* (p.squeeze().var(axis=0).mean() + p.squeeze().var(axis=1).mean())
-            Lv_ = (-1)* (p.squeeze().var(axis=0).mean()).mean()
+            Lv_ = (-1)* (us.squeeze().var(axis=0).mean()).mean()
 
             L += lambda_v * Lv_
 
 
 
             # Compute the policy gradient (PG) loss
-            logp = torch.log(p.squeeze()).sum(axis=1).mean()
+            logp = torch.log(us.squeeze()).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
             # PG = lambda_pg * c * (-logp) + L
 
