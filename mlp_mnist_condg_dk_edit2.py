@@ -340,26 +340,27 @@ def main():
             Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
             Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2) / len(policy_flat)
 
+            # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
+            Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
+
             L = c + lambda_s * (Lb_ + Le_)
+            # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
+            #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
-            # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).sqrt().mean(axis=0).sum()
-            L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
-            # if L_var is full of zeros, then make L_var small number
-            # Create a mask to identify zero elements in L_var
-            zero_mask = (L_var == 0)
+            L += lambda_v * (Lv_)
+            # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
+            #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
-            # Add a small number to the elements identified by the mask
-            L_var = L_var + 1e-6 * zero_mask.float()
-
-            # Lv_ = -torch.log(L_var).sum()
-            Lv_ = -L_var.sum()
-
-            L += lambda_v * Lv_
+            # ifzero = []
+            # for l in range(len(layer_masks)):
+            #     ifzero.append(np.any(layer_masks[l].cpu().detach().numpy().sum(axis=1)==0))
+            # if np.any(ifzero):
+            #     print(ifzero)
+            #     print('waitwaitwait!!')
 
             # Compute the policy gradient (PG) loss
-            logp = torch.log(policy_flat.squeeze()).sum(axis=1).mean()
+            logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
-            # PG = lambda_pg * c * (-logp) + L
 
             gradient = (c * (-logp)).item()
 
@@ -464,25 +465,27 @@ def main():
                 Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(device), p=2)
                 Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(device), p=2) / len(policy_flat)
 
+                # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
+                Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
+
                 L = c + lambda_s * (Lb_ + Le_)
+                # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
+                #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
-                # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).sqrt().mean(axis=0).sum()
-                L_var = torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0)
-                # if L_var is full of zeros, then make L_var small number
-                # Create a mask to identify zero elements in L_var
-                zero_mask = (L_var == 0)
+                L += lambda_v * (Lv_)
+                # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
+                #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
-                # Add a small number to the elements identified by the mask
-                L_var = L_var + 1e-6 * zero_mask.float()
-
-                Lv_ = -torch.log(L_var).sum()
-
-                L += lambda_v * Lv_
+                # ifzero = []
+                # for l in range(len(layer_masks)):
+                #     ifzero.append(np.any(layer_masks[l].cpu().detach().numpy().sum(axis=1)==0))
+                # if np.any(ifzero):
+                #     print(ifzero)
+                #     print('waitwaitwait!!')
 
                 # Compute the policy gradient (PG) loss
-                logp = torch.log(policy_flat.squeeze()).sum(axis=1).mean()
+                logp = torch.log(policy_flat).sum(axis=1).mean()
                 PG = lambda_pg * c * (-logp) + L
-                # PG = lambda_pg * c * (-logp) + L
 
                 gradient = (c * (-logp)).item()
 
