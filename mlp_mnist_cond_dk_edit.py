@@ -184,16 +184,16 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=0.01)
-    args.add_argument('--lambda_v', type=float, default=0.1)
-    args.add_argument('--lambda_l2', type=float, default=1e-5)
+    args.add_argument('--lambda_s', type=float, default=5)
+    args.add_argument('--lambda_v', type=float, default=1e-2)
+    args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=30)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--condnet_min_prob', type=float, default=1e-3)
+    args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=500)
+    args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
     args = args.parse_args()
@@ -241,7 +241,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condtest",
+    wandb.init(project="condgnet_edit3",
                 config=args.__dict__,
                 name='cond_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
@@ -385,9 +385,11 @@ def main():
         model.eval()
         with torch.no_grad():
             # calculate accuracy on test set
-            acc = 0
+            accs = 0
             bn = 0
             taus = 0
+            costs = 0
+            PGs = 0
             Ls = 0
             gradients = 0
             Lb_s = 0
@@ -464,7 +466,7 @@ def main():
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
             wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_PG': PGs / bn,
-                       'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_gradient': gradients / bn})
+                       'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn, 'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_gradient': gradients / bn})
         torch.save(model.state_dict(),
                    './cond_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')

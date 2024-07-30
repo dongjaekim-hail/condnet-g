@@ -201,18 +201,18 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=1.56)
-    args.add_argument('--lambda_v', type=float, default=1.34)
-    args.add_argument('--lambda_l2', type=float, default=1e-5)
+    args.add_argument('--lambda_s', type=float, default=3.75)
+    args.add_argument('--lambda_v', type=float, default=0.1)
+    args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=30)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--condnet_min_prob', type=float, default=1e-3)
+    args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=500)
+    args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=256)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -263,9 +263,9 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condtest",
+    wandb.init(project="condgnet_edit3",
                 config=args.__dict__,
-                name='condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='h256_condg3_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -447,7 +447,7 @@ def main():
                                dim=1)  # changing dimension to 1 for putting hs vector in gnn
                 hs = hs.detach()
 
-                us = gnn_policy(hs, adj_)  # run gnn
+                us, p = gnn_policy(hs, adj_)  # run gnn
                 outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
                 # make labels one hot vector
@@ -513,10 +513,10 @@ def main():
                        'test/epoch_gradient': gradients / bn})
         # save model
         torch.save(mlp_model.state_dict(),
-                   './mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './h256_mlp3_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
         torch.save(gnn_policy.state_dict(),
-                   './gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './h256_gnn3_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
 
     wandb.finish()
