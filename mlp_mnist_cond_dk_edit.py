@@ -189,9 +189,9 @@ def main():
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=100)
+    args.add_argument('--max_epochs', type=int, default=30)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
-    args.add_argument('--condnet_max_prob', type=float, default=1-1e-3)
+    args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
     args.add_argument('--lr', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
@@ -241,7 +241,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet_dk_edit2",
+    wandb.init(project="condgnet_edit3",
                 config=args.__dict__,
                 name='cond_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
@@ -282,6 +282,7 @@ def main():
         PGs = 0
         taus = 0
         Ls = 0
+
         bn = 0
         # run for each batch
         for i, data in enumerate(tqdm(train_loader, 0)):
@@ -304,20 +305,20 @@ def main():
             c = C(outputs, labels.to(model.device))
             # Compute the regularization loss L
 
-            policy_flat = torch.cat(policies,dim=1)
+            policy_flat = torch.cat(policies, dim=1)
             Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), p=2)
-            Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), p=2)/len(policies)
+            Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), p=2) / len(policies)
 
             # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
             Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
 
-            L = c + lambda_s * (Lb_ +Le_)
-                # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
-                #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
+            L = c + lambda_s * (Lb_ + Le_)
+            # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
+            #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
             L += lambda_v * (Lv_)
-                 # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
-                 #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
+            # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
+            #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
             # ifzero = []
             # for l in range(len(layer_masks)):
@@ -326,14 +327,13 @@ def main():
             #     print(ifzero)
             #     print('waitwaitwait!!')
 
-
             # Compute the policy gradient (PG) loss
             logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
 
-            gradient = (c*(-logp)).item()
+            gradient = (c * (-logp)).item()
 
-            PG.backward() # it needs to be checked [TODO]
+            PG.backward()  # it needs to be checked [TODO]
 
             # # gradient에 NaN 및 큰 값 체크
             # for name, param in model.named_parameters():
@@ -361,17 +361,22 @@ def main():
             taus += tau_
             Ls += L.to('cpu').item()
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_tau': tau_, 'train/batch_loss': L.item(), 'train/batch_Lb': Lb_.item(), 'train/batch_Le': Le_.item(), 'train/batch_Lv': Lv_.item(), 'train/batch_gradient': gradient})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(),
+                       'train/batch_tau': tau_, 'train/batch_loss': L.item(), 'train/batch_Lb': Lb_.item(),
+                       'train/batch_Le': Le_.item(), 'train/batch_Lv': Lv_.item(), 'train/batch_gradient': gradient})
 
             # print PG.item(), and acc with name
-            print('Epoch: {}, Batch: {}, Cost: {:.4f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}, Lb: {:.3f}, Le: {:.3f}, Lv: {:.8f}, gradient: {:.3f}'.format(epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
+            print(
+                'Epoch: {}, Batch: {}, Cost: {:.4f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}, Lb: {:.3f}, Le: {:.3f}, Lv: {:.8f}, gradient: {:.3f}'.format(
+                    epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
 
-
-        # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus/bn, 'train/epoch_PG': PGs/bn, 'train/epoch_L': Ls/bn})
+            # wandb log training/epoch
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus / bn,
+                   'train/epoch_PG': PGs / bn, 'train/epoch_L': Ls / bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
+
 
         costs = 0
         accs = 0
@@ -380,10 +385,16 @@ def main():
         model.eval()
         with torch.no_grad():
             # calculate accuracy on test set
-            acc = 0
+            accs = 0
             bn = 0
             taus = 0
+            costs = 0
+            PGs = 0
             Ls = 0
+            gradients = 0
+            Lb_s = 0
+            Le_s = 0
+            Lv_s = 0
             for i, data in enumerate(test_loader, 0):
                 bn += 1
                 # get batch
@@ -407,23 +418,33 @@ def main():
                 c = C(outputs, labels.to(model.device))
 
                 # Compute the regularization loss L
-                policy_flat = torch.cat(policies,dim=1)
-                Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(model.device),2).sqrt().sum()
-                Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(model.device),2).sqrt().mean()
+                policy_flat = torch.cat(policies, dim=1)
+                Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), p=2)
+                Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), p=2) / len(policies)
 
-                Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
+                # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
+                Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
 
-                L = c + lambda_s * (Lb_ +Le_)
-                    # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
-                    #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
+                L = c + lambda_s * (Lb_ + Le_)
+                # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
+                #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
-                L += lambda_v  * (Lv_)
-                     # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
-                     #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
+                L += lambda_v * (Lv_)
+                # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
+                #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
+
+                # ifzero = []
+                # for l in range(len(layer_masks)):
+                #     ifzero.append(np.any(layer_masks[l].cpu().detach().numpy().sum(axis=1)==0))
+                # if np.any(ifzero):
+                #     print(ifzero)
+                #     print('waitwaitwait!!')
 
                 # Compute the policy gradient (PG) loss
                 logp = torch.log(policy_flat).sum(axis=1).mean()
                 PG = lambda_pg * c * (-logp) + L
+
+                gradient = (c * (-logp)).item()
 
                 # wandb log test/batch
                 # wandb.log({'test/batch_acc': acc, 'test/batch_cost': c.to('cpu').item(), 'test/batch_pg': PG.to('cpu').item()})
@@ -433,6 +454,10 @@ def main():
                 accs += acc
                 PGs += PG.to('cpu').item()
                 Ls += L.to('cpu').item()
+                Lb_s += Lb_.to('cpu').item()
+                Le_s += Le_.to('cpu').item()
+                Lv_s += Lv_.to('cpu').item()
+                gradients += gradient
 
                 us = torch.cat(layer_masks, dim=1)
                 tau_ = us.mean().detach().item()
@@ -440,8 +465,11 @@ def main():
             #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
-            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn})
-        torch.save(model.state_dict(), './cond_'+ 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau) + dt_string +'.pt')
+            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn, 'test/epoch_PG': PGs / bn,
+                       'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn, 'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_gradient': gradients / bn})
+        torch.save(model.state_dict(),
+                   './cond_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                       args.tau) + dt_string + '.pt')
     wandb.finish()
 if __name__=='__main__':
     main()
