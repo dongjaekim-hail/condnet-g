@@ -110,7 +110,7 @@ def main(ITE=0):
     time = datetime.now()
     # Arguement Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.0002, type=float, help="Learning rate")
+    parser.add_argument("--lr", default=0.0003, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=60, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
     parser.add_argument("--end_iter", default=20000, type=int)
