@@ -133,14 +133,14 @@ class model_condnet(nn.Module):
         sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
         # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
         #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-        # u_is = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 16, 16).to(self.device)
+        u_is = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 16, 16).to(self.device)
         u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
 
         # 두 번째 Conv 레이어와 마스킹
         h_next = F.relu(self.cnn.conv2(h * u)) * u_i
 
         h = h_next
-        u = u_i
+        u = u_is
 
         policies.append(p_i)
         sample_probs.append(sampling_prob)
@@ -162,7 +162,7 @@ class model_condnet(nn.Module):
         # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
         #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
         u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
-        u = F.interpolate(u, size=(16, 16))
+        # u = F.interpolate(u, size=(16, 16))
 
         # 두 번째 Conv 레이어와 마스킹
         h_next = F.relu(self.cnn.conv3(h * u)) * u_i
@@ -208,11 +208,11 @@ def main():
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=200)
+    args.add_argument('--max_epochs', type=int, default=50)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=200)
+    args.add_argument('--BATCH_SIZE', type=int, default=60)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
     args = args.parse_args()
@@ -228,14 +228,14 @@ def main():
 
     # datasets load mnist data
     train_dataset = datasets.CIFAR10(
-        root="../data/mnist",
+        root="../data/cifar10",
         train=True,
         download=True,
         transform=transforms.ToTensor()
     )
 
     test_dataset = datasets.CIFAR10(
-        root="../data/mnist",
+        root="../data/cifar10",
         train=False,
         download=True,
         transform=transforms.ToTensor()
@@ -252,9 +252,9 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condtest",
+    wandb.init(project="cond_cnn_cifar10",
                 config=args.__dict__,
-                name='cnn_cond_cifar10_conv' + '_tau=' + str(args.tau)
+                name='cond_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     # create model
@@ -277,12 +277,10 @@ def main():
     print('Number of parameters: {}'.format(num_params))
 
     C = nn.CrossEntropyLoss()
-    mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
-                          momentum=0.9, weight_decay=lambda_l2)
-    # mlp_optimizer = optim.SGD(model.mlp.parameters(), lr=learning_rate,
+    mlp_optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=1e-4)
+    # mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
     #                       momentum=0.9, weight_decay=lambda_l2)
-    policy_optimizer = optim.SGD(model.policy_net.parameters(), lr=learning_rate,
-                            momentum=0.9, weight_decay=lambda_l2)
+    policy_optimizer = optim.Adam(model.policy_net.parameters(), lr=0.0003, weight_decay=1e-4)
 
     # run for 50 epochs
     for epoch in trange(max_epochs):
@@ -483,7 +481,7 @@ def main():
                        'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn, 'test/epoch_Lb': Lb_s / bn,
                        'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_gradient': gradients / bn})
         torch.save(model.state_dict(),
-                   './cond_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './cond_cnn_cifar10_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
     wandb.finish()
 
