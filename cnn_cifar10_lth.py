@@ -51,7 +51,10 @@ class SimpleCNN(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
         self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(64 * 16 * 16, 256)
+        self.conv3 = nn.Conv2d(64, 128, 3, padding=1)
+        self.conv4 = nn.Conv2d(128, 128, 3, padding=1)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.fc1 = nn.Linear(128 * 8 * 8, 256)  # Assuming input image size is 32x32
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 10)
         self.dropout = nn.Dropout(0.25)
@@ -62,7 +65,12 @@ class SimpleCNN(nn.Module):
         x = self.conv2(x)
         x = F.relu(x)
         x = self.pool(x)
-        x = x.view(-1, 64 * 16 * 16)
+        x = self.conv3(x)
+        x = F.relu(x)
+        x = self.conv4(x)
+        x = F.relu(x)
+        x = self.pool(x)
+        x = x.view(-1, 128 * 8 * 8)
         x = self.fc1(x)
         x = F.relu(x)
         x = self.dropout(x)
@@ -102,7 +110,7 @@ def main(ITE=0):
     time = datetime.now()
     # Arguement Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.0002, type=float, help="Learning rate")
+    parser.add_argument("--lr", default=0.0003, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=60, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
     parser.add_argument("--end_iter", default=20000, type=int)
@@ -163,7 +171,7 @@ def main(ITE=0):
     make_mask(model)
 
     # Optimizer and Loss
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()  # Default was F.nll_loss
 
     # Layer Looper
@@ -195,7 +203,7 @@ def main(ITE=0):
                 step = 0
             else:
                 original_initialization(mask, initial_state_dict)
-            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
         print(f"\n--- Pruning Level [{ITE}:{_ite}/{ITERATION}]: ---")
 
         # Print the table of Nonzeros in each layer
@@ -205,34 +213,33 @@ def main(ITE=0):
         pbar = tqdm(range(args.end_iter), dynamic_ncols=False)
 
         for iter_ in pbar:
-
             # Frequency for Testing
             if iter_ % args.valid_freq == 0:
-                accuracy = test(model, test_loader, criterion)
+                test_accuracy = test(model, test_loader, criterion)
 
                 # Save Weights
-                if accuracy > best_accuracy:
-                    best_accuracy = accuracy
-                    checkdir(f"{os.getcwd()}/saves/cnn/cifar10/")
-                    torch.save(model,
-                               f"{os.getcwd()}/saves/cnn/cifar10/{_ite}_model_{args.prune_type}.pth.tar")
+                if test_accuracy > best_accuracy:
+                    best_accuracy = test_accuracy
+                    checkdir(f"{os.getcwd()}/saves/mlp/mnist/")
+                    torch.save(model, f"{os.getcwd()}/saves/mlp/mnist/{_ite}_model_{args.prune_type}.pth.tar")
 
             # Training
-            loss = train(model, train_loader, optimizer, criterion)
-            all_loss[iter_] = loss
-            all_accuracy[iter_] = accuracy
+            train_loss, train_accuracy = train(model, train_loader, optimizer, criterion)
+            all_loss[iter_] = train_loss
+            all_accuracy[iter_] = test_accuracy
 
             # Frequency for Printing Accuracy and Loss
             if iter_ % args.print_freq == 0:
-                # pbar.set_description(
                 pbar.write(
-                    f'Train Epoch: {iter_}/{args.end_iter} Loss: {loss:.6f} Accuracy: {accuracy:.2f}% Best Accuracy: {best_accuracy:.2f}%')
-                # wandb.log(
-                #     {'Loss': loss, 'Accuracy': accuracy, 'Best Accuracy': best_accuracy})
-                # wandb.log(
-                #     {f'Pruning Iteration {_ite}/Loss': loss,
-                #      f'Pruning Iteration {_ite}/Accuracy': accuracy,
-                #      f'Pruning Iteration {_ite}/Best Accuracy': best_accuracy})
+                    f'Train Epoch: {iter_}/{args.end_iter} Train Loss: {train_loss:.6f} Train Accuracy: {train_accuracy:.2f}% Test Accuracy: {test_accuracy:.2f}% Best Test Accuracy: {best_accuracy:.2f}%')
+                wandb.log(
+                    {'train/epoch_L': train_loss, 'train/epoch_acc': train_accuracy, 'test/epoch_acc': test_accuracy,
+                     'Best Test Accuracy': best_accuracy})
+                wandb.log(
+                    {f'Pruning Iteration {_ite}/train/epoch_L': train_loss,
+                     f'Pruning Iteration {_ite}/train/epoch_acc': train_accuracy,
+                     f'Pruning Iteration {_ite}/test/epoch_acc': test_accuracy,
+                     f'Pruning Iteration {_ite}/Best Test Accuracy': best_accuracy})
 
         writer.add_scalar('Accuracy/test', best_accuracy, comp1)
         bestacc[_ite] = best_accuracy
@@ -302,9 +309,12 @@ def train(model, train_loader, optimizer, criterion):
     EPS = 1e-6
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.train()
+    epoch_loss = 0
+    correct = 0
+    total = 0
+
     for batch_idx, (imgs, targets) in enumerate(train_loader):
         optimizer.zero_grad()
-        # imgs, targets = next(train_loader)
         imgs, targets = imgs.to(device), targets.to(device)
         output = model(imgs)
         train_loss = criterion(output, targets)
@@ -318,7 +328,17 @@ def train(model, train_loader, optimizer, criterion):
                 grad_tensor = np.where(tensor < EPS, 0, grad_tensor)
                 p.grad.data = torch.from_numpy(grad_tensor).to(device)
         optimizer.step()
-    return train_loss.item()
+
+        epoch_loss += train_loss.item()
+
+        # Calculate accuracy
+        pred = output.data.max(1, keepdim=True)[1]
+        correct += pred.eq(targets.data.view_as(pred)).sum().item()
+        total += targets.size(0)
+
+    epoch_loss /= len(train_loader)
+    accuracy = correct / total
+    return epoch_loss, accuracy
 
 
 # Function for Testing
@@ -335,7 +355,7 @@ def test(model, test_loader, criterion):
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
             correct += pred.eq(target.data.view_as(pred)).sum().item()
         test_loss /= len(test_loader.dataset)
-        accuracy = 100. * correct / len(test_loader.dataset)
+        accuracy = correct / len(test_loader.dataset)
     return accuracy
 
 
