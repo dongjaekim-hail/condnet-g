@@ -48,10 +48,10 @@ sns.set_style('darkgrid')
 class SimpleCNN(nn.Module):
     def __init__(self):
         super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.conv1 = nn.Conv2d(1, 64, 3, padding=1)
         self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(64 * 16 * 16, 256)
+        self.fc1 = nn.Linear(64 * 14 * 14, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 10)
         self.dropout = nn.Dropout(0.25)
@@ -62,7 +62,7 @@ class SimpleCNN(nn.Module):
         x = self.conv2(x)
         x = F.relu(x)
         x = self.pool(x)
-        x = x.view(-1, 64 * 16 * 16)
+        x = x.view(-1, 64 * 14 * 14)
         x = self.fc1(x)
         x = F.relu(x)
         x = self.dropout(x)
@@ -105,7 +105,7 @@ def main(ITE=0):
     parser.add_argument("--lr", default=0.0002, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=60, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=1, type=int)
+    parser.add_argument("--end_iter", default=2, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
@@ -183,7 +183,7 @@ def main(ITE=0):
 
     for _ite in range(args.start_iter, ITERATION):
         if not _ite == 0:
-            prune_by_percentile(args.prune_percent, resample=resample, reinit=reinit)
+            prune_by_percentile(args.prune_percent_conv, args.prune_percent_fc, resample=resample, reinit=reinit)
             if reinit:
                 model.apply(weight_init)
                 step = 0
@@ -196,7 +196,7 @@ def main(ITE=0):
             else:
                 original_initialization(mask, initial_state_dict)
             optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20000, 25000], gamma=0.1)
+            # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20000, 25000], gamma=0.1)
         print(f"\n--- Pruning Level [{ITE}:{_ite}/{ITERATION}]: ---")
 
         # Print the table of Nonzeros in each layer
@@ -219,7 +219,7 @@ def main(ITE=0):
 
             # Training
             loss = train(model, train_loader, optimizer, criterion)
-            scheduler.step()
+            # scheduler.step()
             all_loss[iter_] = loss
             all_accuracy[iter_] = accuracy
 
@@ -340,34 +340,43 @@ def test(model, test_loader, criterion):
 
 
 # Prune by Percentile module
-def prune_by_percentile(percent, resample=False, reinit=False, **kwargs):
+def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
     global step
     global mask
     global model
 
-    # Calculate percentile value
     step = 0
     for name, param in model.named_parameters():
 
-        # We do not prune bias term
         if 'weight' in name:
-            if "fc.weight" in name:
-                continue
+            if "fc" in name:
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.mean(axis=1)
+                percentile_value = np.percentile(tensor, fc_percent)
+            else:
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.reshape(tensor.shape[0], -1).mean(axis=1)
+                percentile_value = np.percentile(tensor, conv_percent)
 
-            tensor = param.data.cpu().numpy()
-            alive = tensor[np.nonzero(tensor)]  # flattened array of nonzero values
-            percentile_value = np.percentile(abs(alive), percent)
-
-            # Convert Tensors to numpy and calculate
+            tensor2prune = param.data.cpu().numpy()
             weight_dev = param.device
-            new_mask = np.where(abs(tensor) < percentile_value, 0, mask[step])
+            mask_in_structure = np.ones_like(tensor)
+            new_mask = np.where(abs(tensor) < percentile_value, 0, mask_in_structure)
 
-            # Apply new weight and mask
-            param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
-            mask[step] = new_mask
+            # make mask in structure to be same shape with shape_param (for example, use np.repeat or something to make 64 to 64, 3, 3, 3)
+            mask_in_shape = np.ones(shape_param)
+            if "fc" in name:
+                mask_in_shape = mask_in_shape * new_mask[:, None]
+            else:
+                mask_in_shape = mask_in_shape * new_mask[:, None, None, None]
+
+
+            param.data = torch.from_numpy(tensor2prune * mask_in_shape).float().to(weight_dev)
+            mask[step] = mask_in_shape
             step += 1
     step = 0
-
 
 # Function to make an empty mask of the same size as the model
 def make_mask(model):
@@ -387,6 +396,7 @@ def make_mask(model):
     step = 0
 
 
+
 def original_initialization(mask_temp, initial_state_dict):
     global model
 
@@ -394,7 +404,7 @@ def original_initialization(mask_temp, initial_state_dict):
     for name, param in model.named_parameters():
         if "weight" in name:
             weight_dev = param.device
-            param.data = torch.from_numpy(mask_temp[step] * initial_state_dict[name].cpu().numpy()).to(weight_dev)
+            param.data = torch.from_numpy(mask_temp[step] * initial_state_dict[name].cpu().numpy()).float().to(weight_dev)
             step = step + 1
         if "bias" in name:
             param.data = initial_state_dict[name]

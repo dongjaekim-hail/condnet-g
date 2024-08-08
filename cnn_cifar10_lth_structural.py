@@ -93,7 +93,7 @@ def print_nonzeros(model):
         print(
             f'{name:20} | nonzeros = {nz_count:7} / {total_params:7} ({100 * nz_count / total_params:6.2f}%) | total_pruned = {total_params - nz_count :7} | shape = {tensor.shape}')
     print(
-        f'alive: {nonzero}, pruned : {total - nonzero}, total: {total}, Compression rate : {total / nonzero:10.2f}x  ({100 * (total - nonzero) / total:6.2f}% pruned)')
+        f'alive: {nonzero}, pruned : {total - nonzero}, total: {total}, Compression rate : {total / nonzero:10.2f}x  ({100  / total * (total - nonzero):6.2f}% pruned)')
     return (round((nonzero / total) * 100, 1))
 
 
@@ -113,7 +113,7 @@ def main(ITE=0):
     parser.add_argument("--lr", default=0.0003, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=60, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=20000, type=int)
+    parser.add_argument("--end_iter", default=1, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
@@ -125,7 +125,7 @@ def main(ITE=0):
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    # wandb.init(project="LTH", entity='hails', name='cnn_mnist', config=args.__dict__)
+    wandb.init(project="LTH", entity='hails', name='cnn_mnist', config=args.__dict__)
     # wandb.login(key="")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -369,17 +369,32 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
     for name, param in model.named_parameters():
 
         if 'weight' in name:
-            if "fc.weight" in name:
-                percentile_value = np.percentile(abs(param.data.cpu().numpy()), fc_percent)
+            if "fc" in name:
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.mean(axis=1)
+                percentile_value = np.percentile(tensor, fc_percent)
             else:
-                percentile_value = np.percentile(abs(param.data.cpu().numpy()), conv_percent)
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.reshape(tensor.shape[0], -1).mean(axis=1)
+                percentile_value = np.percentile(tensor, conv_percent)
 
-            tensor = param.data.cpu().numpy()
+            tensor2prune = param.data.cpu().numpy()
             weight_dev = param.device
-            new_mask = np.where(abs(tensor) < percentile_value, 0, mask[step])
+            mask_in_structure = np.ones_like(tensor)
+            new_mask = np.where(abs(tensor) < percentile_value, 0, mask_in_structure)
 
-            param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
-            mask[step] = new_mask
+            # make mask in structure to be same shape with shape_param (for example, use np.repeat or something to make 64 to 64, 3, 3, 3)
+            mask_in_shape = np.ones(shape_param)
+            if "fc" in name:
+                mask_in_shape = mask_in_shape * new_mask[:, None]
+            else:
+                mask_in_shape = mask_in_shape * new_mask[:, None, None, None]
+
+
+            param.data = torch.from_numpy(tensor2prune * mask_in_shape).float().to(weight_dev)
+            mask[step] = mask_in_shape
             step += 1
     step = 0
 
@@ -408,7 +423,7 @@ def original_initialization(mask_temp, initial_state_dict):
     for name, param in model.named_parameters():
         if "weight" in name:
             weight_dev = param.device
-            param.data = torch.from_numpy(mask_temp[step] * initial_state_dict[name].cpu().numpy()).to(weight_dev)
+            param.data = torch.from_numpy(mask_temp[step] * initial_state_dict[name].cpu().numpy()).float().to(weight_dev)
             step = step + 1
         if "bias" in name:
             param.data = initial_state_dict[name]

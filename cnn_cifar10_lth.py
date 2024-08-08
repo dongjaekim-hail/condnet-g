@@ -113,7 +113,7 @@ def main(ITE=0):
     parser.add_argument("--lr", default=0.0003, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=60, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=20000, type=int)
+    parser.add_argument("--end_iter", default=1, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
