@@ -343,7 +343,7 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
         if 'weight' in name:
             if "fc3.weight" in name:
                 continue
-            if "fc.weight" in name:
+            elif "fc.weight" in name:
                 percentile_value = np.percentile(abs(param.data.cpu().numpy()), fc_percent)
             else:
                 percentile_value = np.percentile(abs(param.data.cpu().numpy()), conv_percent)
