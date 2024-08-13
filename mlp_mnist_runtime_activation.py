@@ -1,27 +1,15 @@
 import torch
-import pickle
-import numpy as np
 import torch.optim as optim
-import torchvision
 from torchvision import transforms, datasets # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
-from torch.nn.utils import prune
-
 import torch.nn as nn
 import torch.nn.functional as F
-import wandb
 
+import numpy as np
+import os
+import wandb
 from datetime import datetime
 
 wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
-
-class ThresholdPruning(prune.BasePruningMethod):
-    PRUNING_TYPE = "unstructured"
-
-    def __init__(self, threshold):
-        self.threshold = threshold
-
-    def compute_mask(self, tensor, default_mask):
-        return torch.abs(tensor) > self.threshold
 
 
 class model_activation(nn.Module):
@@ -55,14 +43,16 @@ class model_activation(nn.Module):
             # 현재 레이어의 활성화 값을 계산
             h = F.relu(self.mlp[i](h))
 
-            # 활성화 값의 평균을 계산
-            activation_mean = torch.mean(h, dim=0)
+            activations = h
 
-            # 평균 값을 내림차순으로 정렬
-            sorted_activation_mean, _ = torch.sort(activation_mean, descending=True)
+            activation_magnitudes = torch.norm(activations, dim=0)
+
+            sorted_activation_magnitudes, _ = torch.sort(activation_magnitudes, descending=True)
+
+            threshold = sorted_activation_magnitudes[round(len(activation_magnitudes)*self.tau)]
 
             # 상위 tau 비율에 해당하는 활성화 값 이상인 값들에 대해 마스크를 생성
-            mask = activation_mean >= sorted_activation_mean[round(len(sorted_activation_mean) * self.tau)]
+            mask = activation_magnitudes > threshold
 
             # 활성화 값을 마스크와 곱해 선택적으로 활성화
             h = h * mask
@@ -72,16 +62,9 @@ class model_activation(nn.Module):
 
         # 마지막 레이어에 대해 동일한 절차를 수행
         h = self.mlp[-1](h)
-        activation_mean = torch.mean(h, dim=0)
-        sorted_activation_mean, _ = torch.sort(activation_mean, descending=True)
-        mask = activation_mean >= sorted_activation_mean[round(len(sorted_activation_mean) * self.tau)]
-        h = h * mask
 
         # 소프트맥스 함수를 적용해 클래스별 확률을 계산
         h = F.softmax(h, dim=1)
-
-        # 마지막 레이어의 마스크를 layer_masks 리스트에 추가
-        layer_masks.append(mask.float())
 
         return h, layer_masks
 
@@ -93,23 +76,20 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=7)
-    args.add_argument('--lambda_v', type=float, default=1.2)
+    args.add_argument('--lambda_s', type=float, default=5)
+    args.add_argument('--lambda_v', type=float, default=1e-2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
     args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=40)
-    args.add_argument('--condnet_min_prob', type=float, default=0.1)
-    args.add_argument('--condnet_max_prob', type=float, default=0.9)
+    args.add_argument('--max_epochs', type=int, default=30)
+    args.add_argument('--condnet_min_prob', type=float, default=1e-3)
+    args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
     args.add_argument('--lr', type=float, default=0.1)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=128)
     args = args.parse_args()
-    lambda_s = args.lambda_s
-    lambda_v = args.lambda_v
     lambda_l2 = args.lambda_l2
-    lambda_pg = args.lambda_pg
     tau = args.tau
     learning_rate = args.lr
     max_epochs = args.max_epochs
@@ -142,9 +122,9 @@ def main():
     )
 
     wandb.init(project="condgtest",
-               config=args.__dict__,
-               name='activation_runtime_comparison_' + '_tau=' + str(args.tau)
-               )
+                config=args.__dict__,
+                name='runtime_activation_magnitude' + '_tau=' + str(args.tau) + '_' + dt_string
+                )
 
     # create model
     model = model_activation(args)
@@ -197,17 +177,17 @@ def main():
             # addup loss and acc
             costs += loss.to('cpu').item()
             accs += acc
+            tau = np.mean([layer_mask.mean().item() for layer_mask in layer_masks])
 
             # wandb log training/batch
             wandb.log({'train/batch_cost': loss.item(), 'train/batch_acc': acc, 'train/batch_tau': tau})
 
             # print PG.item(), and acc with name
             print('Epoch: {}, Batch: {}, Cost: {:.10f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, loss.item(),
-                                                                                         acc, np.mean(
-                    [tau_.mean().item() for tau_ in layer_masks])))
+                                                                                         acc, tau))
 
         # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': tau / bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -253,8 +233,8 @@ def main():
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn,
                        'test/epoch_tau': taus / bn})
-        torch.save(model.state_dict(), './runtime_activation_based_' + 's=' + str(args.lambda_s) + '_v=' + str(
-            args.lambda_v) + '_tau=' + str(args.tau) + dt_string + '.pt')
+
+        torch.save(model.state_dict(), './runtime_magnitude_activation' + '_tau=' + str(args.tau) + dt_string + '.pt')
     wandb.finish()
 
 
