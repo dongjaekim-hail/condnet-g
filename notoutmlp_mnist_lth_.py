@@ -22,6 +22,7 @@ import torchvision.models as models
 from torch.utils.data import Dataset, DataLoader
 from datetime import datetime
 import wandb
+import torch.optim as optim
 
 # Tensorboard initialization
 writer = SummaryWriter()
@@ -29,55 +30,23 @@ writer = SummaryWriter()
 # Plotting Style
 sns.set_style('darkgrid')
 
-# class mlp(nn.Module):
-#     def __init__(self, num_classes=10):
-#         super(mlp, self).__init__()
-#         self.classifier = nn.Sequential(
-#             nn.Linear(28*28, 300),
-#             nn.ReLU(inplace=True),
-#             nn.Linear(300, 100),
-#             nn.ReLU(inplace=True),
-#             nn.Linear(100, num_classes),
-#         )
-#
-#     def forward(self, x):
-#         x = torch.flatten(x, 1)
-#         x = self.classifier(x)
-#         return x
+import torch
+import torch.nn as nn
 
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
-        self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv3 = nn.Conv2d(64, 128, 3, padding=1)
-        self.conv4 = nn.Conv2d(128, 128, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(128 * 8 * 8, 256)  # Assuming input image size is 32x32
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 10)
-        self.dropout = nn.Dropout(0.25)
+class mlp(nn.Module):
+    def __init__(self, num_classes=10):
+        super(mlp, self).__init__()
+        self.fc1 = nn.Linear(28*28, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, num_classes)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.pool(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-        x = self.conv4(x)
-        x = F.relu(x)
-        x = self.pool(x)
-        x = x.view(-1, 128 * 8 * 8)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
+        x = x.view(x.size(0), -1)  # Flatten the input
+        x = self.relu(self.fc1(x))
+        x = self.relu(self.fc2(x))
         x = self.fc3(x)
+        x = F.softmax(x)
         return x
 
 
@@ -110,10 +79,10 @@ def main(ITE=0):
     time = datetime.now()
     # Arguement Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.0003, type=float, help="Learning rate")
-    parser.add_argument("--batch_size", default=60, type=int)
+    parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
+    parser.add_argument("--batch_size", default=200, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=50, type=int)
+    parser.add_argument("--end_iter", default=151, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
@@ -125,7 +94,7 @@ def main(ITE=0):
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="cond_cnn_cifar10_edit", entity='hails', name='uns_cnn_cifar10_lth', config=args.__dict__)
+    wandb.init(project="condgnet_edit4", entity='hails', name='adam_mlp_mnist_lth', config=args.__dict__)
     wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -147,8 +116,8 @@ def main(ITE=0):
     #                                           drop_last=True)
 
     transform = transforms.ToTensor()
-    traindataset = datasets.CIFAR10('../data', train=True, download=True, transform=transform)
-    testdataset = datasets.CIFAR10('../data', train=False, transform=transform)
+    traindataset = datasets.MNIST('../data', train=True, download=True, transform=transform)
+    testdataset = datasets.MNIST('../data', train=False, transform=transform)
     train_loader = torch.utils.data.DataLoader(traindataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
                                                drop_last=False)
     test_loader = torch.utils.data.DataLoader(testdataset, batch_size=args.batch_size, shuffle=False, num_workers=0,
@@ -156,22 +125,24 @@ def main(ITE=0):
 
     # Importing Network Architecture
     global model
-    model = SimpleCNN().to(device)
+    model = mlp().to(device)
 
     # Weight Initialization
     model.apply(weight_init)
 
     # Copying and Saving Initial State
     initial_state_dict = copy.deepcopy(model.state_dict())
-    checkdir(f"{os.getcwd()}/saves/cnn/cifar10/")
+    checkdir(f"{os.getcwd()}/saves/mlp/mnist/")
     torch.save(model,
-               f"{os.getcwd()}/saves/cnn/cifar10/initial_state_dict_{args.prune_type}.pth.tar")
+               f"{os.getcwd()}/saves/mlp/mnist/initial_state_dict_{args.prune_type}.pth.tar")
 
     # Making Initial Mask
     make_mask(model)
 
     # Optimizer and Loss
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-4)
+    # optimizer = optim.SGD(model.parameters(), lr=0.1,
+    #                       momentum=0.9, weight_decay=5e-4)
     criterion = nn.CrossEntropyLoss()  # Default was F.nll_loss
 
     # Layer Looper
@@ -203,7 +174,7 @@ def main(ITE=0):
                 step = 0
             else:
                 original_initialization(mask, initial_state_dict)
-            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+            optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-4)
         print(f"\n--- Pruning Level [{ITE}:{_ite}/{ITERATION}]: ---")
 
         # Print the table of Nonzeros in each layer
@@ -220,8 +191,8 @@ def main(ITE=0):
                 # Save Weights
                 if test_accuracy > best_accuracy:
                     best_accuracy = test_accuracy
-                    checkdir(f"{os.getcwd()}/saves/cnn/cifar10/")
-                    torch.save(model, f"{os.getcwd()}/saves/cnn/cifar10/{_ite}_model_{args.prune_type}.pth.tar")
+                    checkdir(f"{os.getcwd()}/saves/mlp/mnist/")
+                    torch.save(model, f"{os.getcwd()}/saves/mlp/mnist/{_ite}_model_{args.prune_type}.pth.tar")
 
             # Training
             train_loss, train_accuracy = train(model, train_loader, optimizer, criterion)
@@ -241,7 +212,7 @@ def main(ITE=0):
                      f'Pruning Iteration {_ite}/test/epoch_acc': test_accuracy,
                      f'Pruning Iteration {_ite}/Best Test Accuracy': best_accuracy})
 
-        torch.save(model.state_dict(), f"{os.getcwd()}/saves/cnn/cifar10/{_ite}_model_{args.prune_type}_final.pth.tar")
+        torch.save(model.state_dict(), f"{os.getcwd()}/saves/mlp/mnist/{_ite}_model_{args.prune_type}_final.pth.tar")
         writer.add_scalar('Accuracy/test', best_accuracy, comp1)
         bestacc[_ite] = best_accuracy
 
@@ -251,26 +222,26 @@ def main(ITE=0):
         plt.plot(np.arange(1, (args.end_iter) + 1),
                  100 * (all_loss - np.min(all_loss)) / np.ptp(all_loss).astype(float), c="blue", label="Loss")
         plt.plot(np.arange(1, (args.end_iter) + 1), all_accuracy, c="red", label="Accuracy")
-        plt.title(f"Loss Vs Accuracy Vs Iterations (cifar10,cnn)")
+        plt.title(f"Loss Vs Accuracy Vs Iterations (mnist,mlp)")
         plt.xlabel("Iterations")
         plt.ylabel("Loss and Accuracy")
         plt.legend()
         plt.grid(color="gray")
-        checkdir(f"{os.getcwd()}/plots/lt/cnn/cifar10/")
+        checkdir(f"{os.getcwd()}/plots/lt/mlp/mnist/")
         plt.savefig(
-            f"{os.getcwd()}/plots/lt/cnn/cifar10/{args.prune_type}_LossVsAccuracy_{comp1}.png",
+            f"{os.getcwd()}/plots/lt/mlp/mnist/{args.prune_type}_LossVsAccuracy_{comp1}.png",
             dpi=1200)
         plt.close()
 
         # Dump Plot values
-        checkdir(f"{os.getcwd()}/dumps/lt/cnn/cifar10/")
-        all_loss.dump(f"{os.getcwd()}/dumps/lt/cnn/cifar10/{args.prune_type}_all_loss_{comp1}.dat")
+        checkdir(f"{os.getcwd()}/dumps/lt/mlp/mnist/")
+        all_loss.dump(f"{os.getcwd()}/dumps/lt/mlp/mnist/{args.prune_type}_all_loss_{comp1}.dat")
         all_accuracy.dump(
-            f"{os.getcwd()}/dumps/lt/cnn/cifar10/{args.prune_type}_all_accuracy_{comp1}.dat")
+            f"{os.getcwd()}/dumps/lt/mlp/mnist/{args.prune_type}_all_accuracy_{comp1}.dat")
 
         # Dumping mask
-        checkdir(f"{os.getcwd()}/dumps/lt/cnn/cifar10/")
-        with open(f"{os.getcwd()}/dumps/lt/cnn/cifar10/{args.prune_type}_mask_{comp1}.pkl",
+        checkdir(f"{os.getcwd()}/dumps/lt/mlp/mnist/")
+        with open(f"{os.getcwd()}/dumps/lt/mlp/mnist/{args.prune_type}_mask_{comp1}.pkl",
                   'wb') as fp:
             pickle.dump(mask, fp)
 
@@ -280,28 +251,28 @@ def main(ITE=0):
         all_accuracy = np.zeros(args.end_iter, float)
 
     # Dumping Values for Plotting
-    checkdir(f"{os.getcwd()}/dumps/lt/cnn/cifar10/")
-    comp.dump(f"{os.getcwd()}/dumps/lt/cnn/cifar10/{args.prune_type}_compression.dat")
-    bestacc.dump(f"{os.getcwd()}/dumps/lt/cnn/cifar10/{args.prune_type}_bestaccuracy.dat")
+    checkdir(f"{os.getcwd()}/dumps/lt/mlp/mnist/")
+    comp.dump(f"{os.getcwd()}/dumps/lt/mlp/mnist/{args.prune_type}_compression.dat")
+    bestacc.dump(f"{os.getcwd()}/dumps/lt/mlp/mnist/{args.prune_type}_bestaccuracy.dat")
 
     # Plotting
     a = np.arange(args.prune_iterations)
     plt.plot(a, bestacc, c="blue", label="Winning tickets")
-    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (cifar10,cnn)")
+    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (mnist,mlp)")
     plt.xlabel("Unpruned Weights Percentage")
     plt.ylabel("test accuracy")
     plt.xticks(a, comp, rotation="vertical")
     plt.ylim(0, 100)
     plt.legend()
     plt.grid(color="gray")
-    checkdir(f"{os.getcwd()}/plots/lt/cnn/cifar10/")
-    plt.savefig(f"{os.getcwd()}/plots/lt/cnn/cifar10/{args.prune_type}_AccuracyVsWeights.png",
+    checkdir(f"{os.getcwd()}/plots/lt/mlp/mnist/")
+    plt.savefig(f"{os.getcwd()}/plots/lt/mlp/mnist/{args.prune_type}_AccuracyVsWeights.png",
                 dpi=1200)
     plt.close()
 
     elapsed_time = datetime.now() - time
     print('Elapsed time: ', elapsed_time, 'minutes')
-    # wandb.log({'elapsed_time': elapsed_time.seconds})
+    wandb.log({'elapsed_time': elapsed_time.seconds})
     wandb.finish()
 
 
@@ -370,7 +341,9 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
     for name, param in model.named_parameters():
 
         if 'weight' in name:
-            if "fc.weight" in name:
+            if "fc3.weight" in name:
+                continue
+            elif "fc.weight" in name:
                 percentile_value = np.percentile(abs(param.data.cpu().numpy()), fc_percent)
             else:
                 percentile_value = np.percentile(abs(param.data.cpu().numpy()), conv_percent)
