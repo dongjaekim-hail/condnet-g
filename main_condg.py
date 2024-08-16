@@ -173,17 +173,17 @@ def main():
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
     args.add_argument('--lambda_s', type=float, default=4)
-    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_v', type=float, default=0.1)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.3)
+    args.add_argument('--tau', type=float, default=0.1)
     args.add_argument('--max_epochs', type=int, default=40)
     args.add_argument('--condnet_min_prob', type=float, default=0.1)
     args.add_argument('--condnet_max_prob', type=float, default=0.9)
     args.add_argument('--learning_rate', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=64)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -234,7 +234,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condgnet_dk_edit2",
+    wandb.init(project="condgtest_dk_test",
                 config=args.__dict__,
                 name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )

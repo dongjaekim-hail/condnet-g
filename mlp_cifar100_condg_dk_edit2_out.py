@@ -21,9 +21,10 @@ class Mlp(nn.Module):
     def __init__(self):
         super().__init__()
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(28*28, 512))
+        self.layers.append(nn.Linear(32*32*3, 1024))
+        self.layers.append(nn.Linear(1024, 512))
         self.layers.append(nn.Linear(512, 256))
-        self.layers.append(nn.Linear(256, 10))
+        self.layers.append(nn.Linear(256, 100))
 
     def forward(self, x, cond_drop=False, us=None):
         hs = [x]
@@ -42,14 +43,14 @@ class Mlp(nn.Module):
                     x = layer(x)
                     x = F.relu(x)
                     hs.append(x)
-                elif i == 1:
+                elif i == len(self.layers)-1:
+                    # 세 번째 레이어
+                    x = layer(x)
+                    hs.append(x)
+                else: #if i == 1:
                     # 두 번째 레이어
                     x = layer(x)
                     x = F.relu(x)
-                    hs.append(x)
-                elif i == 2:
-                    # 세 번째 레이어
-                    x = layer(x)
                     hs.append(x)
 
         else:
@@ -64,16 +65,16 @@ class Mlp(nn.Module):
                     x = F.relu(x)
                     x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                     idx += 1
-                elif i == 1:
+                elif i == len(self.layers)-1:
+                    # 세 번째 레이어
+                    x = layer(x)
+                    x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                else: #if i == 1:
                     # 두 번째 레이어
                     x = layer(x)
                     x = F.relu(x)
                     x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                     idx += 1
-                elif i == 2:
-                    # 세 번째 레이어
-                    x = layer(x)
-                    x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
 
                 hs.append(x)
 
@@ -84,7 +85,7 @@ class Mlp(nn.Module):
 class Gnn(nn.Module):
     def __init__(self, minprob, maxprob, hidden_size = 64):
         super().__init__()
-        self.embedfc1 = nn.Linear(1562, 1562*hidden_size//16)  # 입력 차원을 2로 변경 (입력값 + 위치정보)
+        self.embedfc1 = nn.Linear(4964, 4964*hidden_size//16)  # 입력 차원을 2로 변경 (입력값 + 위치정보)
         # self.embedfc2 = nn.Linear(hidden_size, hidden_size)
         self.conv1 = DenseSAGEConv(hidden_size//16, hidden_size)
         self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
@@ -92,7 +93,7 @@ class Gnn(nn.Module):
         self.fc1 = nn.Linear(hidden_size, 1)
         self.hidden_size = hidden_size
         # self.fc2 = nn.Linear(64,1, bias=False)
-        self.bn = nn.BatchNorm1d(1562)
+        self.bn = nn.BatchNorm1d(4964)
         self.minprob = minprob
         self.maxprob = maxprob
 
@@ -106,7 +107,7 @@ class Gnn(nn.Module):
         # hs = self.embedfc2(hs)
         # hs = F.tanh(hs)
 
-        hs_0 = hs.view(-1, 1562, self.hidden_size//16)
+        hs_0 = hs.view(-1, 4964, self.hidden_size//16)
         hs = self.conv1(hs_0, batch_adj)
         # check if hs contains nan
         if torch.isnan(hs).any():
@@ -219,10 +220,10 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=1)
-    args.add_argument('--lambda_v', type=float, default=0.1)
+    args.add_argument('--lambda_s', type=float, default=4.27)
+    args.add_argument('--lambda_v', type=float, default=0.063)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=0.05)
+    args.add_argument('--lambda_pg', type=float, default=1e-2)
     args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=30)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
@@ -230,7 +231,7 @@ def main():
     args.add_argument('--lr', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=32)
+    args.add_argument('--hidden-size', type=int, default=128)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -244,7 +245,7 @@ def main():
     condnet_min_prob = args.condnet_min_prob
     condnet_max_prob = args.condnet_max_prob
     compact = args.compact
-    num_inputs = 28**2
+    num_inputs = (32**2) * 3
 
     mlp_model = Mlp().to(device)
     gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, hidden_size=args.hidden_size).to(device)
@@ -255,16 +256,16 @@ def main():
     # copy weights in mlp to mlp_surrogate
     mlp_surrogate.load_state_dict(mlp_model.state_dict())
 
-    # datasets load mnist data
-    train_dataset = datasets.MNIST(
-        root="../data/mnist",
+    # datasets load cifar100
+    train_dataset = datasets.CIFAR100(
+        root="../data/cifar100",
         train=True,
         download=True,
         transform=transforms.ToTensor()
     )
 
-    test_dataset = datasets.MNIST(
-        root="../data/mnist",
+    test_dataset = datasets.CIFAR100(
+        root="../data/cifar100",
         train=False,
         download=True,
         transform=transforms.ToTensor()
@@ -310,7 +311,7 @@ def main():
         num_iteration = 0
         taus = 0
         Ls = 0
-        us = torch.zeros((1562, 1562))
+        us = torch.zeros((4964, 4964))
 
         gnn_policy.train()
         mlp_model.train()
@@ -345,7 +346,7 @@ def main():
             us, p = gnn_policy(hs, adj_)  # run gnn
             outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
-            y_one_hot = torch.zeros(labels.shape[0], 10)
+            y_one_hot = torch.zeros(labels.shape[0], 100)
             y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
 
             c = C(outputs, labels.to(device))
@@ -444,7 +445,7 @@ def main():
             Le_s = 0
             Lv_s = 0
 
-            us = torch.zeros((1562, 1562))
+            us = torch.zeros((4964, 4964))
 
             gnn_policy.train()
             mlp_model.train()
@@ -471,7 +472,7 @@ def main():
                 outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
                 # make labels one hot vector
-                y_one_hot = torch.zeros(labels.shape[0], 10)
+                y_one_hot = torch.zeros(labels.shape[0], 100)
                 y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
 
                 c = C(outputs, labels.to(device))

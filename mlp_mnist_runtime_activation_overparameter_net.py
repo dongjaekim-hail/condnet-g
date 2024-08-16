@@ -12,16 +12,16 @@ from datetime import datetime
 wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
 
-class model_magnitude(nn.Module):
-    def __init__(self,args):
+class model_activation(nn.Module):
+    def __init__(self, args):
         super().__init__()
         if torch.cuda.is_available():
             self.device = 'cuda'
         else:
             self.device = 'cpu'
 
-        self.input_dim = 28*28
-        mlp_hidden = [512, 256, 10]
+        self.input_dim = 28 * 28
+        mlp_hidden = [64, 64, 10]
         output_dim = mlp_hidden[-1]
 
         nlayers = args.nlayers
@@ -32,31 +32,42 @@ class model_magnitude(nn.Module):
         self.mlp = nn.ModuleList()
         self.mlp.append(nn.Linear(self.input_dim, mlp_hidden[0]))
         for i in range(nlayers):
-            self.mlp.append(nn.Linear(mlp_hidden[i], mlp_hidden[i+1]))
-        self.mlp.append(nn.Linear(mlp_hidden[i+1], output_dim))
+            self.mlp.append(nn.Linear(mlp_hidden[i], mlp_hidden[i + 1]))
+        self.mlp.append(nn.Linear(mlp_hidden[i + 1], output_dim))
         self.mlp.to(self.device)
 
     def forward(self, x):
         h = x.view(-1, self.input_dim).to(self.device)
         layer_masks = []
         for i in range(len(self.mlp) - 1):
-            weight_magnitudes = torch.mean(self.mlp[i].weight.abs(), dim=1)
+            # 현재 레이어의 활성화 값을 계산
+            h = F.relu(self.mlp[i](h))
 
-            sorted_weight_magnitudes, _ = torch.sort(weight_magnitudes, descending=True)
+            activations = h
 
-            threshold = sorted_weight_magnitudes[round(len(weight_magnitudes) * self.tau)]
+            activation_magnitudes = torch.norm(activations, dim=0)
 
-            mask = weight_magnitudes >= threshold
+            sorted_activation_magnitudes, _ = torch.sort(activation_magnitudes, descending=True)
 
-            h = F.relu(self.mlp[i](h)) * mask
+            threshold = sorted_activation_magnitudes[round(len(activation_magnitudes)*self.tau)]
 
+            # 상위 tau 비율에 해당하는 활성화 값 이상인 값들에 대해 마스크를 생성
+            mask = activation_magnitudes > threshold
+
+            # 활성화 값을 마스크와 곱해 선택적으로 활성화
+            h = h * mask
+
+            # 생성된 마스크를 layer_masks 리스트에 추가
             layer_masks.append(mask.float())
 
+        # 마지막 레이어에 대해 동일한 절차를 수행
         h = self.mlp[-1](h)
-        # softmax
+
+        # 소프트맥스 함수를 적용해 클래스별 확률을 계산
         h = F.softmax(h, dim=1)
 
         return h, layer_masks
+
 
 def main():
     # get args
@@ -69,7 +80,7 @@ def main():
     args.add_argument('--lambda_v', type=float, default=1e-2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.05)
+    args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=10)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
@@ -83,7 +94,6 @@ def main():
     learning_rate = args.lr
     max_epochs = args.max_epochs
     BATCH_SIZE = args.BATCH_SIZE
-
 
     # datasets load mnist data
     train_dataset = datasets.MNIST(
@@ -113,11 +123,11 @@ def main():
 
     wandb.init(project="condgtest_dk_test",
                 config=args.__dict__,
-                name='runtime_weight_magnitude' + '_tau=' + str(args.tau) + '_' + dt_string
+                name='runtime_activation_magnitude_UP' + '_tau=' + str(args.tau) + '_' + dt_string
                 )
 
     # create model
-    model = model_magnitude(args)
+    model = model_activation(args)
     # model = model_condnet2()
 
     num_params = 0
@@ -132,7 +142,7 @@ def main():
 
     C = nn.CrossEntropyLoss()
     mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
-                          momentum=0.9, weight_decay=lambda_l2)
+                              momentum=0.9, weight_decay=lambda_l2)
 
     # run for 50 epochs
     for epoch in range(max_epochs):
@@ -198,7 +208,7 @@ def main():
 
                 # make one hot vector
                 y_batch_one_hot = torch.zeros(labels.shape[0], 10)
-                y_batch_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1,).tolist()] = 1
+                y_batch_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1, ).tolist()] = 1
 
                 # get output
                 outputs, layer_masks = model(torch.tensor(inputs))
@@ -218,14 +228,15 @@ def main():
                 accs += acc
                 taus += np.mean([tau_.mean().item() for tau_ in layer_masks])
 
-            #print accuracy
+            # print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log training/epoch
-            wandb.log({'test/epoch_acc': accs / bn, 'test/epoch_cost': costs / bn,
+            wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn,
                        'test/epoch_tau': taus / bn})
 
-        torch.save(model.state_dict(), './runtime_magnitude_weight' + '_tau=' + str(args.tau) + dt_string +'.pt')
-
+        torch.save(model.state_dict(), './runtime_magnitude_activation' + '_tau=' + str(args.tau) + dt_string + '.pt')
     wandb.finish()
-if __name__=='__main__':
+
+
+if __name__ == '__main__':
     main()

@@ -260,7 +260,7 @@ def main():
     args.add_argument('--lr', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=60) # [TODO]: gradient accumulate step
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128) # [TODO]: 256 -> 128
+    args.add_argument('--hidden-size', type=int, default=16) # [TODO]: 256 -> 128
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -312,7 +312,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="cond_cnn_cifar10",
+    wandb.init(project="condgtest_dk_test",
                 config=args.__dict__,
                 name='condg_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )

@@ -21,7 +21,7 @@ class model_magnitude(nn.Module):
             self.device = 'cpu'
 
         self.input_dim = 28*28
-        mlp_hidden = [512, 256, 10]
+        mlp_hidden = [64, 64, 10]
         output_dim = mlp_hidden[-1]
 
         nlayers = args.nlayers
@@ -69,7 +69,7 @@ def main():
     args.add_argument('--lambda_v', type=float, default=1e-2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
-    args.add_argument('--tau', type=float, default=0.05)
+    args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=10)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
@@ -113,7 +113,7 @@ def main():
 
     wandb.init(project="condgtest_dk_test",
                 config=args.__dict__,
-                name='runtime_weight_magnitude' + '_tau=' + str(args.tau) + '_' + dt_string
+                name='runtime_weight_magnitude_UP' + '_tau=' + str(args.tau) + '_' + dt_string
                 )
 
     # create model
