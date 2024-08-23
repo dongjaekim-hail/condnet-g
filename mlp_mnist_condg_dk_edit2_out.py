@@ -219,10 +219,10 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=4.27)
-    args.add_argument('--lambda_v', type=float, default=0.063)
+    args.add_argument('--lambda_s', type=float, default=0.1)
+    args.add_argument('--lambda_v', type=float, default=0.5)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--lambda_pg', type=float, default=0.05)
     args.add_argument('--tau', type=float, default=0.6)
     args.add_argument('--max_epochs', type=int, default=30)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
@@ -230,7 +230,7 @@ def main():
     args.add_argument('--lr', type=float, default=0.1)
     args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=32)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -282,8 +282,9 @@ def main():
     )
 
     wandb.init(project="condgtest",
+                entity="hails",
                 config=args.__dict__,
-                name='output_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='out_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -296,6 +297,7 @@ def main():
     layer_cumsum = [0]
     for layer in mlp_model.layers:
         layer_cumsum.append(layer.in_features)
+    layer_cumsum.append(mlp_model.layers[-1].out_features)
     layer_cumsum = np.cumsum(layer_cumsum)
 
     mlp_model.train()
@@ -534,10 +536,10 @@ def main():
                        'test/epoch_gradient': gradients / bn})
         # save model
         torch.save(mlp_model.state_dict(),
-                   './output_mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './out_mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
         torch.save(gnn_policy.state_dict(),
-                   './output_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './out_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
 
     wandb.finish()
