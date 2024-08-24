@@ -38,10 +38,16 @@ for count, target_tau in enumerate([0.6]):
 
     runs_df = pd.DataFrame(data_list)
 
-    best_accuracy = runs_df['test/epoch_acc'].max()
-    best_accuracy_index = runs_df['test/epoch_acc'].idxmax()
+    best_runs_df = runs_df.groupby(['lambda_s', 'lambda_v']).apply(
+        lambda x: x.loc[x['test/epoch_acc'].idxmax()]
+    ).reset_index(drop=True)
 
-    heatmap_data = runs_df.pivot_table(index='lambda_v', columns='lambda_s', values='test/epoch_acc')
+    heatmap_data = best_runs_df.pivot_table(index='lambda_v', columns='lambda_s', values='test/epoch_acc')
+
+    # best_accuracy = runs_df['test/epoch_acc'].max()
+    # best_accuracy_index = runs_df['test/epoch_acc'].idxmax()
+    #
+    # heatmap_data = runs_df.pivot_table(index='lambda_v', columns='lambda_s', values='test/epoch_acc')
 
     heatmap_data = heatmap_data.reindex(heatmap_data.index[::-1])
 
