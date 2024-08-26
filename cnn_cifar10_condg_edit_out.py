@@ -17,9 +17,9 @@ torch.cuda.empty_cache()
 torch.cuda.memory_summary(device=None, abbreviated=False)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
+# wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
-sampling_size = (32, 32)
+sampling_size = (8, 8)
 
 class SimpleCNN(nn.Module):
     def __init__(self):
@@ -58,27 +58,35 @@ class SimpleCNN(nn.Module):
         for layer in self.conv_layers:
             layer_cumsum.append(layer.in_channels)
         layer_cumsum.append(self.conv_layers[-1].out_channels)
+        for layer in self.fc_layers:
+            layer_cumsum.append(layer.out_features)
+        # layer_cumsum.append(self.fc_layers[-1].out_features)
         layer_cumsum = np.cumsum(layer_cumsum)
-
+# array([  0,   3,  67, 131, 259, 387, 643, 899, 909])
         idx = 0
         if not cond_drop:
             for i, layer in enumerate(self.conv_layers, start=1):
-                # if i == len(self.conv_layers): # [TODO]: last layer prune ?
-                #     x = F.relu(layer(x)) # -> output layer
-                # else:
-                x = F.relu(layer(x))
-                hs.append(torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device))
+                if i == len(self.conv_layers): # [TODO]: last layer prune ?
+                    x = F.relu(layer(x)) # -> output layer
+                    hs.append(torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device))
+
+                else:
+                    x = F.relu(layer(x))
+                    hs.append(torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device))
 
                 if i % 2 == 0:
                     x = self.pooling_layer(x)
 
             x = torch.flatten(x, 1)
 
-            for i, layer in enumerate(self.fc_layers):
-                if i == len(self.fc_layers) - 1:
+            hs.append(x)
+            for i, layer in enumerate(self.fc_layers, start=1):
+                if i == len(self.fc_layers):
                     x = layer(x) # -> output layer
+                    hs.append(x)
                 else:
                     x = F.relu(layer(x))
+                    hs.append(x)
                     x = self.dropout(x)
 
         else:
@@ -88,32 +96,36 @@ class SimpleCNN(nn.Module):
             for i, layer in enumerate(self.conv_layers, start=1):
                 us = us.squeeze()
 
-                # if i == len(self.conv_layers):
-                #     x = F.relu(layer(x)) # -> output layer
-                # else:
-                # x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[idx + 2] - layer_cumsum[idx + 1], 1, 1)
-                x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[idx + 2] - layer_cumsum[idx + 1], 1, 1)
-                idx += 1
+                if i == len(self.conv_layers):
+                    x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[
+                        idx + 2] - layer_cumsum[idx + 1], 1, 1)
+                    idx += 1
+                else:
+                    # x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[idx + 2] - layer_cumsum[idx + 1], 1, 1)
+                    x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[idx + 2] - layer_cumsum[idx + 1], 1, 1)
+                    idx += 1
 
                 if i % 2 == 0:
                     x = self.pooling_layer(x)
 
             x = torch.flatten(x, 1)
 
-            for i, layer in enumerate(self.fc_layers):
-                if i == len(self.fc_layers) - 1:
-                    x = layer(x) # -> output layer
+            for i, layer in enumerate(self.fc_layers, start=1):
+                if i == len(self.fc_layers):
+                    x = layer(x) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                 else:
-                    x = F.relu(layer(x))
+                    x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                     x = self.dropout(x)
+                    idx += 1
 
         return x, hs
 
 class Gnn(nn.Module):
-    def __init__(self, minprob, maxprob, adj_nodes, hidden_size = 64):
+    def __init__(self, minprob, maxprob, batch, conv_len, fc_len, adj_nodes, hidden_size = 64):
         super().__init__()
         self.adj_nodes = adj_nodes
-        self.embedfc1 = nn.Linear(self.adj_nodes*sampling_size[0]*sampling_size[1], self.adj_nodes*hidden_size//16)  # 입력 차원을 2로 변경 (입력값 + 위치정보)
+        self.conv_embed = nn.Linear(sampling_size[0]*sampling_size[1], hidden_size//16)
+        self.fc_embed = nn.Linear(1, hidden_size//16) # 입력 차원을 2로 변경 (입력값 + 위치정보) # mlp_mnist_condg_dk_edit2에서는 nn.Linear(1562, 1562*hidden_size//16)
         # self.embedfc2 = nn.Linear(hidden_size, hidden_size)
         self.conv1 = DenseSAGEConv(hidden_size//16, hidden_size)
         self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
@@ -124,17 +136,26 @@ class Gnn(nn.Module):
         self.bn = nn.BatchNorm1d(self.adj_nodes)
         self.minprob = minprob
         self.maxprob = maxprob
+        self.conv_len = conv_len
+        self.fc_len = fc_len
+        self.batch = batch
 
     def forward(self, hs, adj):
         # hs : hidden activity
-        batch_adj = torch.stack([torch.Tensor(adj) for _ in range(hs.shape[0])])
+        batch_adj = torch.stack([torch.Tensor(adj) for _ in range(self.batch)])
         batch_adj = batch_adj.to(device)
 
-        hs = torch.flatten(hs, 1)
-        hs = self.embedfc1(hs)
+        conv_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len)), dim=1)
+        fc_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len + 1, self.conv_len + self.fc_len + 2)), dim=1)
+        fc_hs = fc_hs.unsqueeze(-1)
+
+        conv_hs = self.conv_embed(conv_hs)
+        fc_hs = self.fc_embed(fc_hs)
+        hs = torch.cat([conv_hs, fc_hs], dim=1)
         # hs = F.tanh(hs)
         # hs = self.embedfc2(hs)
         # hs = F.tanh(hs)
+
 
         hs_0 = hs.view(-1, self.adj_nodes, self.hidden_size//16)
         hs = self.conv1(hs_0, batch_adj)
@@ -204,26 +225,43 @@ class Condnet_model(nn.Module):
     #     return y, p, hs, u
 
 
-def adj(model, bidirect = True, last_layer = True, edge2itself = True): # [TODO]: conv의 last_layer prune?
+def adj(model, bidirect = True, last_layer = True, edge2itself = True):
     if last_layer:
-        num_nodes = sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out_channels
-        nl = len(model.conv_layers)
-        trainable_nodes = np.concatenate(
-            (np.ones(sum([layer.in_channels for layer in model.conv_layers])), np.zeros(model.conv_layers[-1].out_channels)),
+        num_nodes = (sum([layer.in_channels for layer in model.conv_layers])) + (sum([layer.in_features for layer in model.fc_layers]) + model.fc_layers[-1].out_features) # conv 노드 + fc 노드
+        nl = len(model.conv_layers) + len(model.fc_layers)
+        conv_trainable_nodes = np.ones(sum([layer.in_channels for layer in model.conv_layers]))
+        fc_trainable_nodes = np.concatenate(
+            (np.ones(sum([layer.in_features for layer in model.fc_layers])), np.zeros(model.fc_layers[-1].out_features)),
             axis=0)
+        trainable_nodes = np.concatenate((conv_trainable_nodes, fc_trainable_nodes), axis=0)
         # trainable_nodes => [1,1,1,......,1,0,0,0] => input layer & hidden layer 의 노드 개수 = 1의 개수, output layer 의 노드 개수 = 0의 개수
     else:
-        num_nodes = sum([layer.in_channels for layer in model.conv_layers])
-        nl = len(model.conv_layers) - 1
-        trainable_nodes = np.ones(num_nodes)
+        # num_nodes = sum([layer.in_channels for layer in model.conv_layers])
+        # nl = len(model.conv_layers) - 1
+        # trainable_nodes = np.ones(num_nodes)
+        num_nodes = (sum([layer.in_channels for layer in model.conv_layers])) + sum([layer.in_features for layer in model.fc_layers]) # conv 노드 + fc 노드
+        nl = len(model.conv_layers) + len(model.fc_layers) - 1
+        conv_trainable_nodes = np.ones(sum([layer.in_channels for layer in model.conv_layers]))
+        fc_trainable_nodes = np.ones(sum([layer.in_features for layer in model.fc_layers]))
+        trainable_nodes = np.concatenate((conv_trainable_nodes, fc_trainable_nodes), axis=0)
 
     adjmatrix = np.zeros((num_nodes, num_nodes), dtype=np.int16)
     current_node = 0
 
     for i in range(nl):
-        layer = model.conv_layers[i]
-        num_current = layer.in_channels
-        num_next = layer.out_channels
+        if i < len(model.conv_layers) - 1:
+            layer = model.conv_layers[i]
+            num_current = layer.in_channels
+            num_next = layer.out_channels
+
+        elif i == len(model.conv_layers) - 1:
+            num_current = model.conv_layers[i].out_channels
+            num_next = model.fc_layers[0].in_features
+
+        elif i > len(model.conv_layers) - 1:
+            layer = model.fc_layers[i - len(model.conv_layers)]
+            num_current = layer.in_features
+            num_next = layer.out_features
 
         for j in range(current_node, current_node + num_current):
             for k in range(current_node + num_current, current_node + num_current + num_next):
@@ -233,6 +271,7 @@ def adj(model, bidirect = True, last_layer = True, edge2itself = True): # [TODO]
         print(current_node, current_node + num_current)
         # print start and end for k
         print(current_node + num_current, current_node + num_current + num_next)
+        print()
         current_node += num_current
 
     if bidirect:
@@ -279,7 +318,8 @@ def main():
 
     mlp_model = SimpleCNN().to(device)
     adj_, nodes_ = adj(mlp_model)
-    gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, adj_nodes=len(nodes_), hidden_size=args.hidden_size).to(device)
+    gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, batch=BATCH_SIZE,
+                     conv_len=len(mlp_model.conv_layers), fc_len=len(mlp_model.fc_layers), adj_nodes=len(nodes_), hidden_size=args.hidden_size).to(device)
 
     # model = Condnet_model(args=args.parse_args())
 
@@ -315,7 +355,7 @@ def main():
 
     wandb.init(project="condgtest",
                 config=args.__dict__,
-                name='condg_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='h256_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -326,6 +366,9 @@ def main():
     for layer in mlp_model.conv_layers:
         layer_cumsum.append(layer.in_channels)
     layer_cumsum.append(mlp_model.conv_layers[-1].out_channels)
+    for layer in mlp_model.fc_layers:
+        layer_cumsum.append(layer.out_features)
+    # layer_cumsum.append(mlp_model.fc_layers[-1].out_features)
     layer_cumsum = np.cumsum(layer_cumsum)
 
     mlp_model.train()
@@ -367,9 +410,10 @@ def main():
             # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
             mlp_surrogate.eval()
             outputs_1, hs = mlp_surrogate(inputs)
-            hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
-                           dim=1)  # changing dimension to 1 for putting hs vector in gnn
-            hs = hs.detach()
+
+            # hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
+            #                dim=1)  # changing dimension to 1 for putting hs vector in gnn
+            # hs = hs.detach()
 
 
             us, p = gnn_policy(hs, adj_)  # run gnn
@@ -568,13 +612,13 @@ def main():
             os.makedirs('saved_model')
 
         torch.save(mlp_model.state_dict(),
-                   './cnn_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   'saved_model/h256_mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
         torch.save(gnn_policy.state_dict(),
-                   './gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   'saved_model/h256_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
 
-    wandb.finish()
+    # wandb.finish()
 
 if __name__ == '__main__':
     main()
