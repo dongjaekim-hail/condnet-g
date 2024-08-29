@@ -51,8 +51,17 @@ class SimpleCNN(nn.Module):
         self.dropout = nn.Dropout(0.25)
         '''
 
-    def forward(self, x, layer_cumsum=None, cond_drop=False, us=None):
+    def forward(self, x, cond_drop=False, us=None):
         hs = [torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device)]
+
+        layer_cumsum = [0]
+        for layer in self.conv_layers:
+            layer_cumsum.append(layer.in_channels)
+        layer_cumsum.append(self.conv_layers[-1].out_channels)
+        for layer in self.fc_layers:
+            layer_cumsum.append(layer.in_features)
+        layer_cumsum.append(self.fc_layers[-1].out_features)
+        layer_cumsum = np.cumsum(layer_cumsum)
 
         idx = 0
         if not cond_drop:
@@ -89,6 +98,7 @@ class SimpleCNN(nn.Module):
 
                 x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[idx + 2] - layer_cumsum[idx + 1], 1, 1)
                 idx += 1
+                hs.append(x)
 
                 if i % 2 == 0:
                     x = self.pooling_layer(x)
@@ -100,9 +110,11 @@ class SimpleCNN(nn.Module):
             for i, layer in enumerate(self.fc_layers, start=1):
                 if i == len(self.fc_layers): # -> output layer
                     x = layer(x) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                    hs.append(x)
                 else:
                     x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                     idx += 1
+                    hs.append(x)
                     x = self.dropout(x)
 
         return x, hs
@@ -400,7 +412,7 @@ def main():
 
 
             us, p = gnn_policy(hs, adj_)  # run gnn
-            outputs, hs = mlp_model(inputs, layer_cumsum, cond_drop=True, us=us.detach())
+            outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
             y_one_hot = torch.zeros(labels.shape[0], 10)
             y_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1)] = 1
@@ -520,9 +532,9 @@ def main():
                 # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
                 mlp_surrogate.eval()
                 outputs_1, hs = mlp_surrogate(inputs)
-                hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
-                               dim=1)  # changing dimension to 1 for putting hs vector in gnn
-                hs = hs.detach()
+                # hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
+                #                dim=1)  # changing dimension to 1 for putting hs vector in gnn
+                # hs = hs.detach()
 
                 us, p = gnn_policy(hs, adj_)  # run gnn
                 outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
