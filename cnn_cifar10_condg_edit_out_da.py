@@ -286,7 +286,7 @@ def main():
     args.add_argument('--max_epochs', type=int, default=30)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
-    args.add_argument('--lr', type=float, default=0.1)
+    args.add_argument('--lr', type=float, default=0.0003)
     args.add_argument('--BATCH_SIZE', type=int, default=60) # [TODO]: gradient accumulate step
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=32)
@@ -380,9 +380,9 @@ def main():
     # mlp_surrogate = SimpleCNN().to(device)
     # mlp_surrogate.load_state_dict(mlp_model.state_dict())
 
-    wandb.init(project="condgnet_edit3",
+    wandb.init(project="condgtest",
                 config=args.__dict__,
-                name='h256_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='out_condg_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -450,8 +450,8 @@ def main():
                 adj_batch = adj_[:current_batch_size]
             else:
                 adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
-            print(adj_.shape)
-            print(adj_batch.size())  # 크기 확인
+            # print(adj_.shape)
+            # print(adj_batch.size())  # 크기 확인
             # adj_ = torch.stack([torch.Tensor(adj_) for _ in range(hs[0].shape[0])]).to(device)
 
             # hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
@@ -599,7 +599,7 @@ def main():
                 else:
                     adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
 
-                print(adj_batch.size())  # 크기 확인
+                # print(adj_batch.size())  # 크기 확인
 
                 us, p = gnn_policy(hs, adj_batch)  # run gnn
                 outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
@@ -669,10 +669,10 @@ def main():
                        'test/epoch_gradient': gradients / bn})
 
         torch.save(mlp_model.state_dict(),
-                   './h256_mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './out_cnn_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
         torch.save(gnn_policy.state_dict(),
-                   './h256_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './out_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
 
     wandb.finish()
