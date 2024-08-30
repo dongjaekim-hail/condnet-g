@@ -9,7 +9,7 @@ from tqdm import tqdm
 from tqdm import trange
 import torch.nn as nn
 import torch.nn.functional as F
-# import wandb
+import wandb
 
 from datetime import datetime
 
@@ -17,7 +17,7 @@ torch.cuda.empty_cache()
 torch.cuda.memory_summary(device=None, abbreviated=False)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-# wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
+wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
 sampling_size = (8, 8)
 
@@ -59,10 +59,9 @@ class SimpleCNN(nn.Module):
             layer_cumsum.append(layer.in_channels)
         layer_cumsum.append(self.conv_layers[-1].out_channels)
         for layer in self.fc_layers:
-            layer_cumsum.append(layer.in_features)
-        layer_cumsum.append(self.fc_layers[-1].out_features)
+            layer_cumsum.append(layer.out_features)
         layer_cumsum = np.cumsum(layer_cumsum)
-
+#array([  0,   3,  67, 131, 259, 387, 643, 899, 909])
         idx = 0
         if not cond_drop:
             for i, layer in enumerate(self.conv_layers, start=1):
@@ -78,7 +77,6 @@ class SimpleCNN(nn.Module):
                     x = self.pooling_layer(x)
 
             x = torch.flatten(x, 1)
-            hs.append(x)
 
             for i, layer in enumerate(self.fc_layers, start=1):
                 if i == len(self.fc_layers):
@@ -105,7 +103,6 @@ class SimpleCNN(nn.Module):
 
             x = torch.flatten(x, 1)
             # [TODO] masking?
-            idx += 1
 
             for i, layer in enumerate(self.fc_layers, start=1):
                 if i == len(self.fc_layers): # -> output layer
@@ -138,12 +135,11 @@ class Gnn(nn.Module):
         self.conv_len = conv_len
         self.fc_len = fc_len
 
-    def forward(self, hs, adj):
-        batch_adj = torch.stack([torch.Tensor(adj) for _ in range(hs[0].shape[0])]) # [TODO] time cost 큰 구간
-        batch_adj = batch_adj.to(device)
+    def forward(self, hs, batch_adj): # [TODO] time cost 큰 구간
+        # batch_adj = batch_adj.to(device)
 
         conv_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len + 1)), dim=1)
-        fc_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len + 1, self.conv_len + 1 + self.fc_len + 1)), dim=1)
+        fc_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len + 1, self.conv_len + self.fc_len + 1)), dim=1)
         fc_hs = fc_hs.unsqueeze(-1)
 
         conv_hs = self.conv_embed(conv_hs)
@@ -223,37 +219,35 @@ class Condnet_model(nn.Module):
 
 def adj(model, bidirect = True, last_layer = True, edge2itself = True):
     if last_layer:
-        num_nodes = (sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out_channels) + (sum([layer.in_features for layer in model.fc_layers]) + model.fc_layers[-1].out_features) # conv 노드 + fc 노드
+        num_nodes = (sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out_channels) + (sum([layer.out_features for layer in model.fc_layers])) # conv 노드 + fc 노드
         nl = len(model.conv_layers) + len(model.fc_layers)
         conv_trainable_nodes = np.concatenate((np.ones(sum([layer.in_channels for layer in model.conv_layers])), np.zeros(model.conv_layers[-1].out_channels)), axis=0) # np.ones(sum([layer.in_channels for layer in model.conv_layers]))
-        fc_trainable_nodes = np.concatenate(
-            (np.ones(sum([layer.in_features for layer in model.fc_layers])), np.zeros(model.fc_layers[-1].out_features)),
-            axis=0)
+        fc_trainable_nodes = np.ones(sum([layer.out_features for layer in model.fc_layers]))
         trainable_nodes = np.concatenate((conv_trainable_nodes, fc_trainable_nodes), axis=0)
         # trainable_nodes => [1,1,1,......,1,0,0,0] => input layer & hidden layer 의 노드 개수 = 1의 개수, output layer 의 노드 개수 = 0의 개수
     else:
         # num_nodes = sum([layer.in_channels for layer in model.conv_layers])
         # nl = len(model.conv_layers) - 1
         # trainable_nodes = np.ones(num_nodes)
-        num_nodes = (sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out__channels) + sum([layer.in_features for layer in model.fc_layers]) # conv 노드 + fc 노드
+        num_nodes = (sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out__channels) + (model.fc_layers[0].out_features + model.fc_layers[1].out_features) # conv 노드 + fc 노드
         nl = len(model.conv_layers) + len(model.fc_layers) - 1
         conv_trainable_nodes = np.concatenate((np.ones(sum([layer.in_channels for layer in model.conv_layers])), np.zeros(model.conv_layers[-1].out_channels)), axis=0) # np.ones(sum([layer.in_channels for layer in model.conv_layers]))
-        fc_trainable_nodes = np.ones(sum([layer.in_features for layer in model.fc_layers]))
+        fc_trainable_nodes = np.ones(model.fc_layers[0].out_features + model.fc_layers[1].out_features)
         trainable_nodes = np.concatenate((conv_trainable_nodes, fc_trainable_nodes), axis=0)
 
     adjmatrix = np.zeros((num_nodes, num_nodes), dtype=np.int16)
     current_node = 0
 
-    for i in range(nl + 1):
+    for i in range(nl):
         if i < len(model.conv_layers): # conv_layer
             layer = model.conv_layers[i]
             num_current = layer.in_channels
             num_next = layer.out_channels
         elif i == len(model.conv_layers): # conv_layer's output layer
             num_current = model.conv_layers[i - 1].out_channels
-            num_next = model.fc_layers[i - len(model.conv_layers)].in_features
+            num_next = model.fc_layers[i - len(model.conv_layers)].out_features
         elif i > len(model.conv_layers): # fc_layer
-            layer = model.fc_layers[i - len(model.conv_layers) - 1]
+            layer = model.fc_layers[i - len(model.conv_layers)]
             num_current = layer.in_features
             num_next = layer.out_features
 
@@ -287,9 +281,9 @@ def main():
     args.add_argument('--lambda_s', type=float, default=1.14)
     args.add_argument('--lambda_v', type=float, default=0.022)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--lambda_pg', type=float, default=0.05)
     args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=50)
+    args.add_argument('--max_epochs', type=int, default=30)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
     args.add_argument('--lr', type=float, default=0.1)
@@ -313,6 +307,8 @@ def main():
 
     mlp_model = SimpleCNN().to(device)
     adj_, nodes_ = adj(mlp_model)
+    adj_ = torch.stack([torch.Tensor(adj_) for _ in range(BATCH_SIZE)]).to(device)
+
     gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, batch=BATCH_SIZE,
                      conv_len=len(mlp_model.conv_layers), fc_len=len(mlp_model.fc_layers), adj_nodes=len(nodes_), hidden_size=args.hidden_size).to(device)
 
@@ -348,10 +344,46 @@ def main():
         shuffle=False
     )
 
-    # wandb.init(project="condgnet_edit3",
-    #             config=args.__dict__,
-    #             name='h256_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
-    #             )
+    # SimpleCNN 모델 초기화
+    # mlp_model = SimpleCNN().to(device)
+    #
+    # # adj_ 및 nodes_ 계산
+    # adj_, nodes_ = adj(mlp_model)
+    #
+    # # AdjBatchLoader 정의
+    # class AdjBatchLoader:
+    #     def __init__(self, adj, batch_size, total_batches):
+    #         self.adj = adj
+    #         self.batch_size = batch_size
+    #         self.total_batches = total_batches
+    #
+    #     def __getitem__(self, index):
+    #         if index < self.total_batches - 1:
+    #             return torch.stack([torch.Tensor(self.adj) for _ in range(self.batch_size)]).to(device)
+    #         else:  # 마지막 배치일 경우
+    #             remaining_size = len(self.adj) % self.batch_size
+    #             return torch.stack([torch.Tensor(self.adj) for _ in range(remaining_size)]).to(device)
+    #
+    #     def __len__(self):
+    #         return self.total_batches
+    #
+    # # AdjBatchLoader 초기화
+    # total_batches = len(train_loader)
+    # adj_batch_loader = AdjBatchLoader(adj_, BATCH_SIZE, total_batches)
+    #
+    # # GNN 모델 초기화
+    # gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, batch=BATCH_SIZE,
+    #                  conv_len=len(mlp_model.conv_layers), fc_len=len(mlp_model.fc_layers),
+    #                  adj_nodes=len(nodes_), hidden_size=args.hidden_size).to(device)
+    #
+    # # mlp_surrogate 초기화 및 가중치 복사
+    # mlp_surrogate = SimpleCNN().to(device)
+    # mlp_surrogate.load_state_dict(mlp_model.state_dict())
+
+    wandb.init(project="condgnet_edit3",
+                config=args.__dict__,
+                name='h256_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                )
 
     C = nn.CrossEntropyLoss()
     mlp_optimizer = optim.Adam(mlp_model.parameters(), lr=0.0003, weight_decay=1e-4)
@@ -400,18 +432,34 @@ def main():
             # inputs = inputs.view(-1, num_inputs).to(device)
             inputs = inputs.to(device)
 
+            # adj_batch = adj_batch_loader[i]
+
+            # if inputs.size(0) < BATCH_SIZE:
+            #     adj_batch = torch.stack([torch.Tensor(adj_) for _ in range(inputs.size(0))]).to(device)
+            # else:
+            #     adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
+
             # Forward Propagation
             # ouputs, hs     = self.infer_forward_propagation(inputs, adj_)
             # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
             mlp_surrogate.eval()
             outputs_1, hs = mlp_surrogate(inputs)
+            current_batch_size = hs[0].shape[0]
+
+            if current_batch_size < BATCH_SIZE:
+                adj_batch = adj_[:current_batch_size]
+            else:
+                adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
+            print(adj_.shape)
+            print(adj_batch.size())  # 크기 확인
+            # adj_ = torch.stack([torch.Tensor(adj_) for _ in range(hs[0].shape[0])]).to(device)
 
             # hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
             #                dim=1)  # changing dimension to 1 for putting hs vector in gnn
             # hs = hs.detach()
 
 
-            us, p = gnn_policy(hs, adj_)  # run gnn
+            us, p = gnn_policy(hs, adj_batch)  # run gnn
             outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
             y_one_hot = torch.zeros(labels.shape[0], 10)
@@ -475,10 +523,10 @@ def main():
             tau_ = us.mean().detach().item()
             taus += tau_
             # wandb log training/batch
-            # wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf,
-            #            'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_,
-            #            'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_,
-            #            'train/batch_gradient': gradient})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf,
+                       'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_,
+                       'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_,
+                       'train/batch_gradient': gradient})
 
             # print PG.item(), and acc with name
             print(
@@ -486,8 +534,8 @@ def main():
                     epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
 
             # wandb log training/epoch
-        # wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn,
-        #            'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs / bn, 'train/epoch_L': Ls / bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn,
+                   'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs / bn, 'train/epoch_L': Ls / bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
@@ -527,16 +575,33 @@ def main():
 
                 inputs = inputs.to(device)
 
+                # adj_batch = adj_batch_loader[i]
+
+                # if inputs.size(0) < BATCH_SIZE:
+                #     adj_batch = torch.stack([torch.Tensor(adj_) for _ in range(inputs.size(0))]).to(device)
+                # else:
+                #     adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
+
                 # Forward Propagation
                 # ouputs, hs     = self.infer_forward_propagation(inputs, adj_)
                 # y_pred, us, hs, p = self.forward_propagation(inputs, adj_, hs.detach())
                 mlp_surrogate.eval()
                 outputs_1, hs = mlp_surrogate(inputs)
+                # adj_ = torch.stack([torch.Tensor(adj_) for _ in range(hs[0].shape[0])]).to(device)
                 # hs = torch.cat(tuple(hs[i] for i in range(len(hs))),
                 #                dim=1)  # changing dimension to 1 for putting hs vector in gnn
                 # hs = hs.detach()
 
-                us, p = gnn_policy(hs, adj_)  # run gnn
+                current_batch_size = hs[0].shape[0]
+
+                if current_batch_size < BATCH_SIZE:
+                    adj_batch = adj_[:current_batch_size]
+                else:
+                    adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
+
+                print(adj_batch.size())  # 크기 확인
+
+                us, p = gnn_policy(hs, adj_batch)  # run gnn
                 outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
                 # make labels one hot vector
@@ -598,22 +663,19 @@ def main():
                 taus += tau_
 
             # wandb log training/epoch
-            # wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
-            #            'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn,
-            #            'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn,
-            #            'test/epoch_gradient': gradients / bn})
-        # save model
-        if not os.path.exists('saved_model'):
-            os.makedirs('saved_model')
+            wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
+                       'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn,
+                       'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn,
+                       'test/epoch_gradient': gradients / bn})
 
         torch.save(mlp_model.state_dict(),
-                   'saved_model/h256_mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './h256_mlp_model_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
         torch.save(gnn_policy.state_dict(),
-                   'saved_model/h256_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './h256_gnn_policy_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
 
-    # wandb.finish()
+    wandb.finish()
 
 if __name__ == '__main__':
     main()
