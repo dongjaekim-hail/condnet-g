@@ -73,10 +73,10 @@ class model_condnet(nn.Module):
 
         # HANDCRAFTED POLICY NET
         self.policy_net = nn.ModuleList()
-        self.policy_net.append(nn.Linear(3 * 32 * 32, 64))
-        self.policy_net.append(nn.Linear(64 * 32 * 32, 64))
-        self.policy_net.append(nn.Linear(64 * 32 * 32, 128))
-        self.policy_net.append(nn.Linear(128 * 32 * 32, 128))
+        self.policy_net.append(nn.Linear(3 * 8 * 8, 64))
+        self.policy_net.append(nn.Linear(64 * 8 * 8, 64))
+        self.policy_net.append(nn.Linear(64 * 8 * 8, 128))
+        self.policy_net.append(nn.Linear(128 * 8 * 8, 128))
         self.policy_net.append(nn.Linear(128 * 8 * 8, 256))
         self.policy_net.append(nn.Linear(256, 256))
         self.policy_net.append(nn.Linear(256, 10))
@@ -98,7 +98,7 @@ class model_condnet(nn.Module):
         # 첫 번째 Conv 레이어와 마스킹
         # print(f"After first conv: {h.shape}")
 
-        h_re = F.interpolate(h, size=(32, 32))
+        h_re = F.interpolate(h, size=(8, 8))
         p_i = self.policy_net[0](h_re.view(h_re.size(0), -1))
         p_i = F.sigmoid(p_i)
         p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
@@ -124,7 +124,7 @@ class model_condnet(nn.Module):
         sample_probs.append(sampling_prob)
         layer_masks.append(u_i)
 
-        h_re = F.interpolate(h, size=(32, 32))
+        h_re = F.interpolate(h, size=(8, 8))
         p_i = self.policy_net[1](h_re.view(h_re.size(0), -1))
         p_i = F.sigmoid(p_i)
         p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
@@ -152,7 +152,7 @@ class model_condnet(nn.Module):
 
         h = self.cnn.pool(h)
 
-        h_re = F.interpolate(h, size=(32, 32))
+        h_re = F.interpolate(h, size=(8, 8))
         p_i = self.policy_net[2](h_re.view(h_re.size(0), -1))
         p_i = F.sigmoid(p_i)
         p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
@@ -178,7 +178,7 @@ class model_condnet(nn.Module):
         sample_probs.append(sampling_prob)
         layer_masks.append(u_i)
 
-        h_re = F.interpolate(h, size=(32, 32))
+        h_re = F.interpolate(h, size=(8, 8))
         p_i = self.policy_net[3](h_re.view(h_re.size(0), -1))
         p_i = F.sigmoid(p_i)
         p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
@@ -297,18 +297,18 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=8.44)
-    args.add_argument('--lambda_v', type=float, default=0.001)
+    args.add_argument('--lambda_s', type=float, default=0.1)
+    args.add_argument('--lambda_v', type=float, default=0.01)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--lambda_pg', type=float, default=0.05)
     args.add_argument('--tau', type=float, default=0.6)
-    args.add_argument('--max_epochs', type=int, default=50)
+    args.add_argument('--max_epochs', type=int, default=30)
     args.add_argument('--condnet_min_prob', type=float, default=1e-3)
     args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
-    args.add_argument('--lr', type=float, default=0.1)
+    args.add_argument('--lr', type=float, default=0.0003)
     args.add_argument('--BATCH_SIZE', type=int, default=60)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--hidden-size', type=int, default=32)
     args = args.parse_args()
     lambda_s = args.lambda_s
     lambda_v = args.lambda_v
@@ -348,7 +348,7 @@ def main():
 
     wandb.init(project="condgtest",
                 config=args.__dict__,
-                name='cond_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='out_cond_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     # create model
@@ -374,7 +374,9 @@ def main():
     mlp_optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=1e-4)
     # mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
     #                       momentum=0.9, weight_decay=lambda_l2)
-    policy_optimizer = optim.Adam(model.policy_net.parameters(), lr=0.0003, weight_decay=1e-4)
+    policy_optimizer = optim.Adam(model.policy_net.parameters(), lr=0.1, weight_decay=1e-4)
+    # policy_optimizer = optim.SGD(model.policy_net.parameters(), lr=0.1,
+    #                           momentum=0.9, weight_decay=lambda_l2)
 
     # run for 50 epochs
     for epoch in trange(max_epochs):
@@ -575,7 +577,7 @@ def main():
                        'test/epoch_tau': taus / bn, 'test/epoch_L': Ls / bn, 'test/epoch_Lb': Lb_s / bn,
                        'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_gradient': gradients / bn})
         torch.save(model.state_dict(),
-                   './cond_cnn_cifar10_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
+                   './out_cond_cnn_cifar10_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
     wandb.finish()
 
