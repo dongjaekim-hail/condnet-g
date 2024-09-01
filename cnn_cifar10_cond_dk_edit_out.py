@@ -374,8 +374,8 @@ def main():
     mlp_optimizer = optim.Adam(model.parameters(), lr=0.0003, weight_decay=1e-4)
     # mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
     #                       momentum=0.9, weight_decay=lambda_l2)
-    policy_optimizer = optim.Adam(model.policy_net.parameters(), lr=0.1, weight_decay=1e-4)
-    # policy_optimizer = optim.SGD(model.policy_net.parameters(), lr=0.1,
+    policy_optimizer = optim.Adam(model.policy_net.parameters(), lr=0.01, weight_decay=1e-4)
+    # policy_optimizer = optim.SGD(model.policy_net.parameters(), lr=0.0003,
     #                           momentum=0.9, weight_decay=lambda_l2)
 
     # run for 50 epochs
