@@ -1,9 +1,9 @@
 # condnet-g
-cnn_mnist_lth.py   
-cnn_cifar10_lth.py   
-위 두개 LTH논문과 동일한 기능을 하는지 검토 및 lightning 부탁드립니다..
-
-
--완-
-
-이제 RL only 볼거임
+cnn  
+optim.Adam(model.parameters(), lr=0.0003, weight_decay=1e-4)  
+  
+mlp  
+mlp_optimizer = optim.SGD(mlp_model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)  
+  
+policy  
+policy_optimizer = optim.Adam(gnn_policy.parameters(), lr=0.001, weight_decay=1e-4)
