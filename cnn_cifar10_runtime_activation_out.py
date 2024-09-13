@@ -159,7 +159,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="cond_cnn_cifar10_edit",
+    wandb.init(project="condgtest",
                 config=args.__dict__,
                 name='out_cnn_runtime_activation_magnitude' + '_tau=' + str(args.tau) + '_' + dt_string
                 )

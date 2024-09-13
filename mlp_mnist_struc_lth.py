@@ -94,7 +94,7 @@ def main(ITE=0):
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="condgnet_edit5", entity='hails', name='s_mlp_mnist_lth', config=args.__dict__)
+    wandb.init(project="condgtest", entity='hails', name='s_mlp_mnist_lth', config=args.__dict__)
     wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
