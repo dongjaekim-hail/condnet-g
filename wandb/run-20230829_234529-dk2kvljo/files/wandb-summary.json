@@ -1,1 +1,0 @@
-{"train/batch_cost": 2.3024799823760986, "train/batch_acc": 0.109375, "train/batch_pg": 5.978764533996582, "train/batch_tau": 0.2, "_timestamp": 1693320351.9063158, "_runtime": 22.640671730041504, "_step": 6, "_wandb": {"runtime": 19}}
