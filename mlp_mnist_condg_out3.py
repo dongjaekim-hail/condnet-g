@@ -84,9 +84,9 @@ class Mlp(nn.Module):
 class Gnn(nn.Module):
     def __init__(self, minprob, maxprob, hidden_size = 64):
         super().__init__()
-        self.embedfc1 = nn.Linear(1562, 1562*hidden_size//16)  # 입력 차원을 2로 변경 (입력값 + 위치정보)
+        self.embedfc1 = nn.Linear(1, hidden_size)  # 입력 차원을 2로 변경 (입력값 + 위치정보)
         # self.embedfc2 = nn.Linear(hidden_size, hidden_size)
-        self.conv1 = DenseSAGEConv(hidden_size//16, hidden_size)
+        self.conv1 = DenseSAGEConv(hidden_size, hidden_size)
         self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
         self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
         self.fc1 = nn.Linear(hidden_size, 1)
@@ -101,12 +101,12 @@ class Gnn(nn.Module):
         # batch_adj = torch.stack([torch.Tensor(adj) for _ in range(hs.shape[0])])
         # batch_adj = batch_adj.to(device)
 
-        hs = self.embedfc1(hs)
+        hs = self.embedfc1(hs.unsqueeze(2))
         # hs = F.tanh(hs)
         # hs = self.embedfc2(hs)
         # hs = F.tanh(hs)
 
-        hs_0 = hs.view(-1, 1562, self.hidden_size//16)
+        hs_0 = hs.view(-1, 1562, self.hidden_size)
         hs = self.conv1(hs_0, batch_adj)
         # check if hs contains nan
         if torch.isnan(hs).any():
@@ -219,19 +219,19 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=10)
-    args.add_argument('--lambda_v', type=float, default=0.5)
+    args.add_argument('--lambda_s', type=float, default=4)
+    args.add_argument('--lambda_v', type=float, default=1)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=0.05)
+    args.add_argument('--lambda_pg', type=float, default=0.01)
     args.add_argument('--tau', type=float, default=0.3)
-    args.add_argument('--max_epochs', type=int, default=30)
-    args.add_argument('--condnet_min_prob', type=float, default=1e-3)
-    args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
-    args.add_argument('--lr', type=float, default=0.01)
+    args.add_argument('--max_epochs', type=int, default=100)
+    args.add_argument('--condnet_min_prob', type=float, default=0.01)
+    args.add_argument('--condnet_max_prob', type=float, default=0.99)
     args.add_argument('--BATCH_SIZE', type=int, default=200)
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=32)
-    args.add_argument('--policy-lr', type=float, default=0.005)
+    args.add_argument('--hidden-size', type=int, default=128)
+    args.add_argument('--lr', type=float, default=0.1)
+    args.add_argument('--policy-lr', type=float, default=0.1)
     args = args.parse_args()
 
     lambda_s = args.lambda_s
@@ -284,7 +284,7 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="condg_dk_test",
+    wandb.init(project="condg_dk_test_lrs",
                 entity="hails",
                 config=args.__dict__,
                 name='0.3t0.001out_condg_mlp_mnist_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
@@ -372,12 +372,13 @@ def main():
 
             # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
             Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
+            Lv2_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).mean()
 
             L = c + lambda_s * (Lb_ + Le_)
             # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
             #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
-            L += lambda_v * (Lv_)
+            L += lambda_v * (Lv2_)
             # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
             #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
@@ -419,13 +420,13 @@ def main():
             # wandb log training/batch
             wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_acc_bf': accbf,
                        'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_,
-                       'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_,
+                       'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_,'train/batch_Lv2': Lv2_,
                        'train/batch_gradient': gradient})
 
             # print PG.item(), and acc with name
             print(
                 'Epoch: {}, Batch: {}, Cost: {:.4f}, PG:{:.5f}, Acc: {:.3f}, Acc: {:.3f}, Tau: {:.3f}, Lb: {:.3f}, Le: {:.3f}, Lv: {:.8f}, gradient: {:.3f}'.format(
-                    epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv_, gradient))
+                    epoch, i, c.item(), PG.item(), acc, accbf, tau_, Lb_, Le_, Lv2_, gradient))
 
             # wandb log training/epoch
         wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_acc_bf': accsbf / bn,
@@ -454,6 +455,7 @@ def main():
             Lb_s = 0
             Le_s = 0
             Lv_s = 0
+            Lv2_s = 0
 
             us = torch.zeros((1562, 1562))
 
@@ -493,7 +495,7 @@ def main():
 
                 c = C(outputs, labels.to(device))
 
-                policy_flat = us[:, layer_cumsum[1]:].squeeze()
+                policy_flat = p[:, layer_cumsum[1]:].squeeze()
 
                 # Lb_ = torch.pow(policy_flat.mean(axis=0)-torch.tensor(tau).to(device),2).sqrt().sum()
                 # Le_ = torch.pow(policy_flat.mean(axis=1)-torch.tensor(tau).to(device),2).sqrt().mean()
@@ -503,12 +505,13 @@ def main():
 
                 # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
                 Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
+                Lv2_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).mean()
 
                 L = c + lambda_s * (Lb_ + Le_)
                 # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
                 #                 torch.pow(torch.cat(policies, dim=1).mean(axis=2) - t
 
-                L += lambda_v * (Lv_)
+                L += lambda_v * (Lv2_)
                 # (torch.cat(policies,dim=1).to('cpu').var(axis=1).mean() +
                 #                    torch.cat(policies,dim=1).to('cpu').var(axis=2).mean())
 
@@ -540,6 +543,7 @@ def main():
                 Lb_s += Lb_.to('cpu').item()
                 Le_s += Le_.to('cpu').item()
                 Lv_s += Lv_.to('cpu').item()
+                Lv2_s += Lv2_.to('cpu').item()
                 gradients += gradient
 
                 tau_ = us.mean().detach().item()
@@ -548,7 +552,7 @@ def main():
             # wandb log training/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn, 'test/epoch_acc_bf': accsbf / bn,
                        'test/epoch_tau': taus / bn, 'test/epoch_PG': PGs / bn, 'test/epoch_L': Ls / bn,
-                       'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn,
+                       'test/epoch_Lb': Lb_s / bn, 'test/epoch_Le': Le_s / bn, 'test/epoch_Lv': Lv_s / bn, 'test/epoch_Lv2': Lv2_s / bn,
                        'test/epoch_gradient': gradients / bn})
         # save model
         torch.save(mlp_model.state_dict(),

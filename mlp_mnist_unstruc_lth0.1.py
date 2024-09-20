@@ -79,7 +79,7 @@ def main(ITE=0):
     time = datetime.now()
     # Arguement Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", default=0.01, type=float, help="Learning rate")
+    parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=200, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
     parser.add_argument("--end_iter", default=100, type=int)
@@ -94,7 +94,7 @@ def main(ITE=0):
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="condg_dk_test_lrs", entity='hails', name='uns_mlp_mnist_lth', config=args.__dict__)
+    wandb.init(project="condg_dk_test_lrs", entity='hails', name='uns_mlp_mnist_lth0.1', config=args.__dict__)
     wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
