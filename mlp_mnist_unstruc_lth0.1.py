@@ -89,8 +89,8 @@ def main(ITE=0):
     parser.add_argument("--prune_type", default="lt", type=str, help="lt | reinit")
     parser.add_argument("--gpu", default="0", type=str)
     parser.add_argument("--prune_percent", default=20, type=int, help="Pruning percent")
-    parser.add_argument("--prune_percent_conv", default=10, type=int, help="Pruning percent for conv layers")
-    parser.add_argument("--prune_percent_fc", default=20, type=int, help="Pruning percent for fc layers")
+    parser.add_argument("--prune_percent_conv", default=60, type=int, help="Pruning percent for conv layers")
+    parser.add_argument("--prune_percent_fc", default=60, type=int, help="Pruning percent for fc layers")
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
@@ -342,7 +342,7 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
     for name, param in model.named_parameters():
 
         if 'weight' in name:
-            if "fc.weight" in name:
+            if "fc" in name:
                 percentile_value = np.percentile(abs(param.data.cpu().numpy()), fc_percent)
             else:
                 percentile_value = np.percentile(abs(param.data.cpu().numpy()), conv_percent)
