@@ -21,9 +21,10 @@ class Mlp(nn.Module):
     def __init__(self):
         super().__init__()
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(28*28, 512))
-        self.layers.append(nn.Linear(512, 256))
-        self.layers.append(nn.Linear(256, 10))
+        self.layers.append(nn.Linear(28*28, 2048))
+        self.layers.append(nn.Linear(2048, 2048))
+        self.layers.append(nn.Linear(2048, 2048))
+        self.layers.append(nn.Linear(2048, 10))
 
     def forward(self, x, cond_drop=False, us=None):
         hs = [x]
@@ -179,7 +180,7 @@ def main():
     args.add_argument('--condnet_min_prob', type=float, default=0.01)
     args.add_argument('--condnet_max_prob', type=float, default=0.99)
     args.add_argument('--learning_rate', type=float, default=0.03)
-    args.add_argument('--BATCH_SIZE', type=int, default=256)
+    args.add_argument('--BATCH_SIZE', type=int, default=100)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=64)
     args = args.parse_args()
