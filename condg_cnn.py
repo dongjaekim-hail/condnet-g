@@ -252,8 +252,8 @@ def main():
     args.add_argument('--tau', type=float, default=0.3)
     args.add_argument('--condnet_min_prob', type=float, default=0.01)
     args.add_argument('--condnet_max_prob', type=float, default=0.99)
-    args.add_argument('--lr', type=float, default=0.05)
-    args.add_argument('--BATCH_SIZE', type=int, default=256) # [TODO]: gradient accumulate step
+    args.add_argument('--lr', type=float, default=0.1)
+    args.add_argument('--BATCH_SIZE', type=int, default=60) # [TODO]: gradient accumulate step
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=64)
     args = args.parse_args()
@@ -346,9 +346,9 @@ def main():
     # mlp_surrogate = SimpleCNN().to(device)
     # mlp_surrogate.load_state_dict(mlp_model.state_dict())
 
-    wandb.init(project="condgtest",
+    wandb.init(project="condg_cnn_a0.0003s0.1",
                 config=args.__dict__,
-                name='condg_mlp_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='condg_cnn_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -357,8 +357,7 @@ def main():
     mlp_optimizer = optim.Adam(mlp_model.parameters(), lr=0.0003, weight_decay=1e-4)
     policy_optimizer = optim.SGD(gnn_policy.parameters(), lr=learning_rate,
                                  momentum=0.9, weight_decay=lambda_l2)
-    # policy_optimizer = optim.SGD(gnn_policy.parameters(), lr=learning_rate,
-    #                              momentum=0.9, weight_decay=lambda_l2)
+    # policy_optimizer = optim.Adam(gnn_policy.parameters(), lr=0.0003, weight_decay=1e-4)
 
     mlp_model.train()
     # run for 50 epochs
