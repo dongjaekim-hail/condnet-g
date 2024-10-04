@@ -31,32 +31,49 @@ class Mlp(nn.Module):
         layer_cumsum = [0]
         for layer in self.layers:
             layer_cumsum.append(layer.in_features)
-        layer_cumsum.append(layer.out_features)
-
+        layer_cumsum.append(self.layers[-1].out_features)
         layer_cumsum = np.cumsum(layer_cumsum)
 
         idx = 0
         if not cond_drop:
-            for layer in self.layers:
-                x = layer(x)
-                x = F.tanh(x)
-                # dropout
-                # x = nn.Dropout(p=0.3)(x)
-                hs.append(x)
+            for i, layer in enumerate(self.layers):
+                if i == 0:
+                    # 첫 번째 레이어
+                    x = layer(x)
+                    x = F.relu(x)
+                    hs.append(x)
+                elif i == 1:
+                    # 두 번째 레이어
+                    x = layer(x)
+                    x = F.relu(x)
+                    hs.append(x)
+                elif i == 2:
+                    # 세 번째 레이어
+                    x = layer(x)
+                    hs.append(x)
+
         else:
             if us is None:
-                raise ValueError('u should be given')
+                raise ValueError('us should be given')
             # conditional activation
-            for layer in self.layers:
+            for i, layer in enumerate(self.layers):
                 us = us.squeeze()
-                len_out = layer.in_features
-                x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
-                x = layer(x)
-                x = F.tanh(x)
-                # dropout
-                # x = nn.Dropout(p=0.3)(x)
-
-                idx += 1
+                if i == 0:
+                    # 첫 번째 레이어
+                    x = layer(x)
+                    x = F.relu(x)
+                    x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                    idx += 1
+                elif i == 1:
+                    # 두 번째 레이어
+                    x = layer(x)
+                    x = F.relu(x)
+                    x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                    idx += 1
+                elif i == 2:
+                    # 세 번째 레이어
+                    x = layer(x)
+                    x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
 
                 hs.append(x)
 
@@ -233,8 +250,9 @@ def main():
     )
 
     wandb.init(project="condg_mlp_dk_test",
+                entity="hails",
                 config=args.__dict__,
-                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='condg_mlp_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
@@ -453,4 +471,3 @@ def main():
 
 if __name__=='__main__':
     main()
-

@@ -39,10 +39,10 @@ class Mlp(nn.Module):
         if not cond_drop:
             for layer in self.layers:
                 x = layer(x)
-                x = F.tanh(x)
+                hs.append(x)
+                x = F.relu(x)
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
-                hs.append(x)
         else:
             if us is None:
                 raise ValueError('u should be given')
@@ -50,9 +50,10 @@ class Mlp(nn.Module):
             for layer in self.layers:
                 us = us.squeeze()
                 len_out = layer.in_features
-                x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
+                # x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
                 x = layer(x)
-                x = F.tanh(x)
+                x = F.relu(x)
+                x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
 
@@ -78,6 +79,9 @@ class Gnn(nn.Module):
     def forward(self, hs, batch_adj):
 
         hs_0 = hs.unsqueeze(-1)
+
+        # here we use sigmoid activation function
+        hs_0 = F.sigmoid(hs_0)
 
         hs = F.sigmoid(self.conv1(hs_0, batch_adj))
         hs = F.sigmoid(self.conv2(hs, batch_adj))
@@ -234,7 +238,7 @@ def main():
 
     wandb.init(project="condg_mlp_dk_test",
                 config=args.__dict__,
-                name='s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='raw_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()

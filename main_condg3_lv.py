@@ -39,7 +39,7 @@ class Mlp(nn.Module):
         if not cond_drop:
             for layer in self.layers:
                 x = layer(x)
-                x = F.tanh(x)
+                x = F.sigmoid(x)
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
                 hs.append(x)
@@ -50,9 +50,10 @@ class Mlp(nn.Module):
             for layer in self.layers:
                 us = us.squeeze()
                 len_out = layer.in_features
-                x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
+                # x = x * us[:,layer_cumsum[idx]:layer_cumsum[idx+1]] # where it cuts off [TODO]
                 x = layer(x)
-                x = F.tanh(x)
+                x = F.relu(x)
+                x = x * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
                 # dropout
                 # x = nn.Dropout(p=0.3)(x)
 
