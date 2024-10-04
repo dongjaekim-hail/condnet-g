@@ -171,7 +171,7 @@ def main():
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('--nlayers', type=int, default=3)
-    args.add_argument('--lambda_s', type=float, default=10)
+    args.add_argument('--lambda_s', type=float, default=20)
     args.add_argument('--lambda_v', type=float, default=0.1)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
     args.add_argument('--lambda_pg', type=float, default=1e-3)
