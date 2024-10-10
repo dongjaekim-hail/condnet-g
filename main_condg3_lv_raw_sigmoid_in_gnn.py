@@ -238,7 +238,7 @@ def main():
 
     wandb.init(project="condg_mlp_dk_test",
                 config=args.__dict__,
-                name='raw_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='rawthengnnsig_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
     C = nn.CrossEntropyLoss()
