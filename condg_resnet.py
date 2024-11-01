@@ -594,29 +594,9 @@ class runtime_pruner(L.LightningModule):
     def configure_optimizers(self):
         # resnet_optimizer = torch.optim.SGD(self.resnet.parameters(), lr=self.learning_rate,
         #                                    momentum=0.9, weight_decay=self.lambda_l2)
-        # gnn_optimizer = torch.optim.SGD(self.gnn_policy.parameters(), lr=self.learning_rate,
-        #                                 momentum=0.9, weight_decay=self.lambda_l2)
-        # return gnn_optimizer
-
-        # GNN 옵티마이저 설정 (SGD, 초기 학습률 0.1, 모멘텀 0.9, 가중치 감쇠 0.0001)
-        gnn_optimizer = torch.optim.SGD(
-            self.gnn_policy.parameters(),
-            lr=0.1,  # 초기 학습률
-            momentum=0.9,  # 모멘텀
-            weight_decay=0.0001  # 가중치 감쇠
-        )
-
-        # 손실이 감소하지 않을 때 학습률 감소 (오류가 평탄해질 때 10배 감소)
-        gnn_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            gnn_optimizer,
-            mode='min',  # 손실이 최소일 때 적용
-            factor=0.1,  # 학습률을 0.1배로 감소
-            patience=10,  # 10번의 epoch 동안 개선되지 않으면 감소
-            verbose=True  # 학습률 감소 시 출력
-        )
-
-        # 옵티마이저와 스케줄러를 함께 반환
-        return [gnn_optimizer], [gnn_scheduler]
+        gnn_optimizer = torch.optim.SGD(self.gnn_policy.parameters(), lr=self.learning_rate,
+                                        momentum=0.9, weight_decay=self.lambda_l2)
+        return gnn_optimizer
 
     def on_validation_epoch_end(self):
         if self.trainer.sanity_checking:
@@ -630,6 +610,27 @@ class runtime_pruner(L.LightningModule):
                    './resnet18_onlyrl_gnn_policy_' + 's=' + str(self.lambda_s) + '_v=' + str(
                        self.lambda_v) + '_tau=' + str(
                        self.tau) + dt_string + '.pt')
+
+
+        # # GNN 옵티마이저 설정 (SGD, 초기 학습률 0.1, 모멘텀 0.9, 가중치 감쇠 0.0001)
+        # gnn_optimizer = torch.optim.SGD(
+        #     self.gnn_policy.parameters(),
+        #     lr=0.1,  # 초기 학습률
+        #     momentum=0.9,  # 모멘텀
+        #     weight_decay=0.0001  # 가중치 감쇠
+        # )
+        #
+        # # 손실이 감소하지 않을 때 학습률 감소 (오류가 평탄해질 때 10배 감소)
+        # gnn_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #     gnn_optimizer,
+        #     mode='min',  # 손실이 최소일 때 적용
+        #     factor=0.1,  # 학습률을 0.1배로 감소
+        #     patience=10,  # 10번의 epoch 동안 개선되지 않으면 감소
+        #     verbose=True  # 학습률 감소 시 출력
+        # )
+        #
+        # # 옵티마이저와 스케줄러를 함께 반환
+        # return [gnn_optimizer], [gnn_scheduler]
 
     # def on_fit_end(self):
     #     avg_time_resnet_eval = np.mean(self.e_time_resnet_eval)
