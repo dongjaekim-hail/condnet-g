@@ -751,7 +751,7 @@ def main():
     elif args.matmul_precision == 'high':
         torch.set_float32_matmul_precision("high")
 
-    logger = WandbLogger(project="condg_cnn", entity='hails', name='condg_resnet18_onlyrl_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau),
+    logger = WandbLogger(project="condg_cnn", entity='hails', name='condg_resnet18_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau),
                          config=args.__dict__)
 
     time = datetime.now()
