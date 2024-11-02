@@ -554,7 +554,7 @@ def main():
 
                 L = c + lambda_s * (Lb_ + Le_)
 
-                Lv_ = (-1) * (p.squeeze().var(axis=0).mean() + p.squeeze().var(axis=1).mean())
+                Lv_ =  -torch.norm(p.squeeze() - p.squeeze().mean(axis=0), p=2, dim=0).mean()
                 L += lambda_v * Lv_
 
                 # Compute the policy gradient (PG) loss
