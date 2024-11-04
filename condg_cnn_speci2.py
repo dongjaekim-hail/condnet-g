@@ -1,9 +1,10 @@
 import torch
-import pickle
+import os
 import numpy as np
 import torch.optim as optim
-import torchvision
+# import torchvision
 from torchvision import transforms, datasets # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
+from torch_geometric.nn import DenseSAGEConv
 from tqdm import tqdm
 from tqdm import trange
 import torch.nn as nn
@@ -12,11 +13,32 @@ import wandb
 
 from datetime import datetime
 
+torch.cuda.empty_cache()
+torch.cuda.memory_summary(device=None, abbreviated=False)
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
+
+sampling_size = (8, 8)
 
 class SimpleCNN(nn.Module):
     def __init__(self):
-        super(SimpleCNN, self).__init__()
+        super().__init__()
+        self.conv_layers = nn.ModuleList()
+        self.fc_layers = nn.ModuleList()
+        self.pooling_layer = nn.MaxPool2d(2, 2)
+        self.dropout = nn.Dropout(0.25)
+
+        self.conv_layers.append(nn.Conv2d(3, 64, 3, padding=1)) # conv1
+        self.conv_layers.append(nn.Conv2d(64, 64, 3, padding=1)) # conv2
+        self.conv_layers.append(nn.Conv2d(64, 128, 3, padding=1)) # conv3
+        self.conv_layers.append(nn.Conv2d(128, 128, 3, padding=1)) # conv4
+
+        self.fc_layers.append(nn.Linear(128 * 8 * 8, 256)) # fc1 # Assuming input image size is 32x32
+        self.fc_layers.append(nn.Linear(256, 256)) # fc2
+        self.fc_layers.append(nn.Linear(256, 10)) # fc3
+
+        '''
         self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
         self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
@@ -27,376 +49,183 @@ class SimpleCNN(nn.Module):
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 10)
         self.dropout = nn.Dropout(0.25)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.pool(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-        x = self.conv4(x)
-        x = F.relu(x)
-        x = self.pool(x)
-        x = x.view(-1, 128 * 8 * 8)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc3(x)
-        return x
-
-    def get_output_channels(self):  # todo add output channels when last conv
-        channels = [0]
-        conv_layers = [layer for layer in self.children() if isinstance(layer, nn.Conv2d)]
-        fc_layers = [layer for layer in self.children() if isinstance(layer, nn.Linear)]
-
-        # 모든 Conv2d 레이어의 in_channels 추가
-        for layer in conv_layers:
-            channels.append(layer.out_channels)
-
-        # # 마지막 Conv2d 레이어의 out_channels 추가
-        # if conv_layers:
-        #     channels.append(conv_layers[-1].out_channels)
-
-        # 모든 Linear 레이어의 out_features 추가
-        for layer in fc_layers:
-            channels.append(layer.out_features)
-
-        return channels
-
-class model_condnet(nn.Module):
-    def __init__(self, args):
-        super().__init__()
-        if torch.cuda.is_available():
-            self.device = 'cuda'
-        else:
-            self.device = 'cpu'
-
-        self.cnn = SimpleCNN().to(self.device)
-
-        self.condnet_min_prob = args.condnet_min_prob
-        self.condnet_max_prob = args.condnet_max_prob
-
-        # HANDCRAFTED POLICY NET
-        self.policy_net = nn.ModuleList()
-        self.policy_net.append(nn.Linear(3 * 8 * 8, 64))
-        self.policy_net.append(nn.Linear(64 * 8 * 8, 64))
-        self.policy_net.append(nn.Linear(64 * 8 * 8, 128))
-        self.policy_net.append(nn.Linear(128 * 8 * 8, 128))
-        self.policy_net.append(nn.Linear(128 * 8 * 8, 256))
-        self.policy_net.append(nn.Linear(256, 256))
-        self.policy_net.append(nn.Linear(256, 10))
-
-        self.policy_net.to(self.device)
-
-        self.channels = self.cnn.get_output_channels()
+        '''
 
     def forward(self, x, cond_drop=False, us=None):
-        layer_cumsum = np.cumsum(self.channels)
-        # policies = []
-        # sample_probs = []
-        # us = []
-        # layer_masks = []
+        hs = [torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device)]
+
+        layer_cumsum = [0]
+        for layer in self.conv_layers:
+            layer_cumsum.append(layer.in_channels)
+        layer_cumsum.append(self.conv_layers[-1].out_channels)
+        for layer in self.fc_layers:
+            layer_cumsum.append(layer.out_features)
+        layer_cumsum = np.cumsum(layer_cumsum)
+#array([  0,   3,  67, 131, 259, 387, 643, 899, 909])
+        idx = 0
         if not cond_drop:
-            policies = []
-            sample_probs = []
-            us = []
-            layer_masks = []
+            for i, layer in enumerate(self.conv_layers, start=1):
+                if i == len(self.conv_layers):
+                    x = F.relu(layer(x)) # -> output layer
+                    hs.append(torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device))
 
-            x = x.to(self.device)
-            # u = torch.ones(x.shape[0], 64, x.shape[2], x.shape[3]).to(self.device)
-            h = x
-            u = torch.ones(h.shape[0], h.shape[1], h.shape[2], h.shape[3]).to(self.device)
-            # 첫 번째 Conv 레이어와 마스킹
-            # print(f"After first conv: {h.shape}")
+                else:
+                    x = F.relu(layer(x))
+                    hs.append(torch.flatten(F.interpolate(x, size=sampling_size), 2).to(device))
 
-            h_re = F.interpolate(h, size=(8, 8))
-            p_i = self.policy_net[0](h_re.view(h_re.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
+                if i % 2 == 0:
+                    x = self.pooling_layer(x)
 
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
+            x = torch.flatten(x, 1)
 
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
-            # u_i = u_i[:, channels_cumsum[0]:channels_cumsum[1], :, :]  # 채널을 맞추기 위해 차원을 추가
-            # print(f"u_i after first conv: {u_i.shape}")
-            # print(f"u after first conv: {u.shape}")
-            # h = (h * u) * u_i
-            h_next = F.relu(self.cnn.conv1(h * u)) * u_i
-            h = h_next
-            u = u_i
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-
-            h_re = F.interpolate(h, size=(8, 8))
-            p_i = self.policy_net[1](h_re.view(h_re.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
-
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
-
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-            u_is = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 16, 16).to(self.device)
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
-
-            # 두 번째 Conv 레이어와 마스킹
-            h_next = F.relu(self.cnn.conv2(h * u)) * u_i
-
-            h = h_next
-            u = u_is
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-
-            h = self.cnn.pool(h)
-
-            h_re = F.interpolate(h, size=(8, 8))
-            p_i = self.policy_net[2](h_re.view(h_re.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
-
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
-
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
-            # u = F.interpolate(u, size=(16, 16))
-
-            # 두 번째 Conv 레이어와 마스킹
-            h_next = F.relu(self.cnn.conv3(h * u)) * u_i
-
-            h = h_next
-            u = u_i
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-
-            h_re = F.interpolate(h, size=(8, 8))
-            p_i = self.policy_net[3](h_re.view(h_re.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
-
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
-
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-            u_is = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 8, 8).to(self.device)
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
-            # u = F.interpolate(u, size=(16, 16))
-
-            # 두 번째 Conv 레이어와 마스킹
-            h_next = F.relu(self.cnn.conv4(h * u)) * u_i
-
-            h = h_next
-            u = u_is
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-
-            h = self.cnn.pool(h)
-
-            # FC1 레이어와 마스킹
-            u = u.reshape(u.size(0), -1)
-            h = h.view(h.size(0), -1)
-
-            p_i = self.policy_net[4](h.view(h.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
-
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
-
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-
-            h_next = F.relu(self.cnn.fc1(h * u)) * u_i
-            # print(f"After FC1: {h.shape}")
-
-            h = h_next
-            u = u_i
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-
-            # FC2 레이어와 마스킹
-            h = self.cnn.dropout(h)
-            p_i = self.policy_net[5](h.view(h.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
-
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
-
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-
-            h_next = F.relu(self.cnn.fc2(h * u)) * u_i
-            # print(f"After FC1: {h.shape}")
-
-            h = h_next
-            u = u_i
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-            # print(f"After FC2: {h.shape}")
-
-            # FC3 레이어와 마스킹
-            h = self.cnn.dropout(h)
-            p_i = self.policy_net[6](h.view(h.size(0), -1))
-            p_i = F.sigmoid(p_i)
-            p_i = p_i * (self.condnet_max_prob - self.condnet_min_prob) + self.condnet_min_prob
-            u_i = torch.bernoulli(p_i).to(self.device)
-
-            if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
-                u_i[idx] = 1
-
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-            # u_i = F.interpolate(u_i.unsqueeze(1), size=h.size(1) * h.size(2) * h.size(3), mode='linear',
-            #                     align_corners=True).squeeze(1).view(h.size(0), h.size(1), h.size(2), h.size(3))
-            us.append(u_i)
-
-            h_next = F.relu(self.cnn.fc3(h * u)) * u_i
-            # print(f"After FC1: {h.shape}")
-
-            h = h_next
-
-            policies.append(p_i)
-            sample_probs.append(sampling_prob)
-            layer_masks.append(u_i)
-            # print(f"After FC3: {h.shape}")
-
-            return h, us, policies, sample_probs, layer_masks
+            for i, layer in enumerate(self.fc_layers, start=1):
+                if i == len(self.fc_layers):
+                    x = layer(x) # -> output layer
+                    hs.append(x)
+                else:
+                    x = F.relu(layer(x))
+                    hs.append(x)
+                    x = self.dropout(x)
 
         else:
-            x = x.to(self.device)
-            # u = torch.ones(x.shape[0], 64, x.shape[2], x.shape[3]).to(self.device)
-            h = x
-            u = torch.ones(h.shape[0], h.shape[1], h.shape[2], h.shape[3]).to(self.device)
+            if us is None:
+                raise ValueError('us should be given')
+            # conditional activation
+            for i, layer in enumerate(self.conv_layers, start=1):
+                us = us.squeeze()
 
-            u_i = us[:, layer_cumsum[0]:layer_cumsum[1]]
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+                x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]].view(-1, layer_cumsum[idx + 2] - layer_cumsum[idx + 1], 1, 1)
+                idx += 1
+                hs.append(x)
 
-            h_next = F.relu(self.cnn.conv1(h * u)) * u_i
-            h = h_next
-            u = u_i
+                if i % 2 == 0:
+                    x = self.pooling_layer(x)
 
-            u_i = us[:, layer_cumsum[1]:layer_cumsum[2]]
-            u_is = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 16, 16).to(self.device)
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+            x = torch.flatten(x, 1)
+            # [TODO] masking?
 
-            # 두 번째 Conv 레이어와 마스킹
-            h_next = F.relu(self.cnn.conv2(h * u)) * u_i
-            h = h_next
-            u = u_is
+            for i, layer in enumerate(self.fc_layers, start=1):
+                if i == len(self.fc_layers): # -> output layer
+                    x = layer(x) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                    hs.append(x)
+                else:
+                    x = F.relu(layer(x)) * us[:, layer_cumsum[idx + 1]:layer_cumsum[idx + 2]]
+                    idx += 1
+                    hs.append(x)
+                    x = self.dropout(x)
 
-            h = self.cnn.pool(h)
+        return x, hs
 
-            u_i = us[:, layer_cumsum[2]:layer_cumsum[3]]
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+class Gnn(nn.Module):
+    def __init__(self, minprob, maxprob, batch, conv_len, fc_len, adj_nodes, hidden_size = 64):
+        super().__init__()
+        self.conv1 = DenseSAGEConv(8*8, hidden_size)
+        self.conv2 = DenseSAGEConv(hidden_size, hidden_size)
+        self.conv3 = DenseSAGEConv(hidden_size, hidden_size)
+        self.fc1 = nn.Linear(hidden_size, 1)
+        # self.fc2 = nn.Linear(64,1, bias=False)
+        self.minprob = minprob
+        self.maxprob = maxprob
+        self.conv_len = conv_len
+        self.fc_len = fc_len
 
-            # 두 번째 Conv 레이어와 마스킹
-            h_next = F.relu(self.cnn.conv3(h * u)) * u_i
-            h = h_next
-            u = u_i
+    def forward(self, hs, batch_adj):
 
-            u_i = us[:, layer_cumsum[3]:layer_cumsum[4]]
-            u_is = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 8, 8).to(self.device)
-            u_i = u_i.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h.size(2), h.size(3)).to(self.device)
+        conv_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len + 1)), dim=1)
+        fc_hs = torch.cat(tuple(hs[i] for i in range(self.conv_len + 1, self.conv_len + self.fc_len + 1)), dim=1)
+        fc_hs = fc_hs.unsqueeze(-1)
+        fc_hs = fc_hs.expand(-1, -1, 64)
 
-            # 두 번째 Conv 레이어와 마스킹
-            h_next = F.relu(self.cnn.conv4(h * u)) * u_i
-            h = h_next
-            u = u_is
+        hs_0 = torch.cat([conv_hs, fc_hs], dim=1)
 
-            h = self.cnn.pool(h)
+        hs = F.sigmoid(self.conv1(hs_0, batch_adj))
+        hs = F.sigmoid(self.conv2(hs, batch_adj))
+        hs = F.sigmoid(self.conv3(hs, batch_adj))
+        hs_conv = hs
+        hs = self.fc1(hs)
+        # hs = self.fc2(hs)
+        p = F.sigmoid(hs)
+        # bernoulli sampling
+        p = p * (self.maxprob - self.minprob) + self.minprob
+        u = torch.bernoulli(p).to(device) # [TODO] Error : probability -> not a number(nan), p is not in range of 0 to 1
 
-            # FC1 레이어와 마스킹
-            u = u.reshape(u.size(0), -1)
-            h = h.view(h.size(0), -1)
-            u_i = us[:, layer_cumsum[4]:layer_cumsum[5]]
-            h_next = F.relu(self.cnn.fc1(h * u)) * u_i
-            h = h_next
-            u = u_i
+        return u, p
+
+def adj(model, bidirect = True, last_layer = True, edge2itself = True):
+    if last_layer:
+        num_nodes = (sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out_channels) + (sum([layer.out_features for layer in model.fc_layers])) # conv 노드 + fc 노드
+        nl = len(model.conv_layers) + len(model.fc_layers)
+        conv_trainable_nodes = np.concatenate((np.ones(sum([layer.in_channels for layer in model.conv_layers])), np.zeros(model.conv_layers[-1].out_channels)), axis=0) # np.ones(sum([layer.in_channels for layer in model.conv_layers]))
+        fc_trainable_nodes = np.ones(sum([layer.out_features for layer in model.fc_layers]))
+        trainable_nodes = np.concatenate((conv_trainable_nodes, fc_trainable_nodes), axis=0)
+        # trainable_nodes => [1,1,1,......,1,0,0,0] => input layer & hidden layer 의 노드 개수 = 1의 개수, output layer 의 노드 개수 = 0의 개수
+    else:
+        # num_nodes = sum([layer.in_channels for layer in model.conv_layers])
+        # nl = len(model.conv_layers) - 1
+        # trainable_nodes = np.ones(num_nodes)
+        num_nodes = (sum([layer.in_channels for layer in model.conv_layers]) + model.conv_layers[-1].out__channels) + (model.fc_layers[0].out_features + model.fc_layers[1].out_features) # conv 노드 + fc 노드
+        nl = len(model.conv_layers) + len(model.fc_layers) - 1
+        conv_trainable_nodes = np.concatenate((np.ones(sum([layer.in_channels for layer in model.conv_layers])), np.zeros(model.conv_layers[-1].out_channels)), axis=0) # np.ones(sum([layer.in_channels for layer in model.conv_layers]))
+        fc_trainable_nodes = np.ones(model.fc_layers[0].out_features + model.fc_layers[1].out_features)
+        trainable_nodes = np.concatenate((conv_trainable_nodes, fc_trainable_nodes), axis=0)
+
+    adjmatrix = np.zeros((num_nodes, num_nodes), dtype=np.int16)
+    current_node = 0
+
+    for i in range(nl):
+        if i < len(model.conv_layers): # conv_layer
+            layer = model.conv_layers[i]
+            num_current = layer.in_channels
+            num_next = layer.out_channels
+        elif i == len(model.conv_layers): # conv_layer's output layer
+            num_current = model.conv_layers[i - 1].out_channels
+            num_next = model.fc_layers[i - len(model.conv_layers)].out_features
+        elif i > len(model.conv_layers): # fc_layer
+            layer = model.fc_layers[i - len(model.conv_layers)]
+            num_current = layer.in_features
+            num_next = layer.out_features
 
 
-            # FC2 레이어와 마스킹
-            h = self.cnn.dropout(h)
-            u_i = us[:, layer_cumsum[5]:layer_cumsum[6]]
-            h_next = F.relu(self.cnn.fc2(h * u)) * u_i
-            h = h_next
-            u = u_i
+        for j in range(current_node, current_node + num_current):
+            for k in range(current_node + num_current, current_node + num_current + num_next):
+                adjmatrix[j, k] = 1
 
-            # FC3 레이어와 마스킹
-            h = self.cnn.dropout(h)
-            u_i = us[:, layer_cumsum[6]:layer_cumsum[7]]
-            h_next = F.relu(self.cnn.fc3(h * u)) * u_i
-            h = h_next
+        # print start and end for j
+        print(current_node, current_node + num_current)
+        # print start and end for k
+        print(current_node + num_current, current_node + num_current + num_next)
+        print()
+        current_node += num_current
 
-            return h
+    if bidirect:
+        adjmatrix += adjmatrix.T
 
+    if edge2itself:
+        adjmatrix += np.eye(num_nodes, dtype=np.int16)
+        # make sure every element that is non-zero is 1
+    adjmatrix[adjmatrix != 0] = 1
+    return adjmatrix, trainable_nodes
 def main():
     # get args
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
     import argparse
     args = argparse.ArgumentParser()
-    args.add_argument('--nlayers', type=int, default=1)
-    args.add_argument('--lambda_s', type=float, default=0.5)
-    args.add_argument('--lambda_v', type=float, default=0.01)
+    args.add_argument('--nlayers', type=int, default=3)
+    args.add_argument('--lambda_s', type=float, default=10)
+    args.add_argument('--lambda_v', type=float, default=0.3)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
-    args.add_argument('--lambda_pg', type=float, default=0.05)
+    args.add_argument('--lambda_pg', type=float, default=1e-3)
+    args.add_argument('--max_epochs', type=int, default=100)
     args.add_argument('--tau', type=float, default=0.3)
-    args.add_argument('--max_epochs', type=int, default=30)
-    args.add_argument('--condnet_min_prob', type=float, default=1e-3)
-    args.add_argument('--condnet_max_prob', type=float, default=1 - 1e-3)
-    args.add_argument('--lr', type=float, default=0.001)
-    args.add_argument('--BATCH_SIZE', type=int, default=60)
+    args.add_argument('--condnet_min_prob', type=float, default=0.01)
+    args.add_argument('--condnet_max_prob', type=float, default=0.99)
+    args.add_argument('--lr', type=float, default=0.1)
+    args.add_argument('--BATCH_SIZE', type=int, default=60) # [TODO]: gradient accumulate step
     args.add_argument('--compact', type=bool, default=False)
-    args.add_argument('--hidden-size', type=int, default=32)
+    args.add_argument('--hidden-size', type=int, default=64)
     args = args.parse_args()
+
     lambda_s = args.lambda_s
     lambda_v = args.lambda_v
     lambda_l2 = args.lambda_l2
@@ -405,7 +234,20 @@ def main():
     learning_rate = args.lr
     max_epochs = args.max_epochs
     BATCH_SIZE = args.BATCH_SIZE
+    condnet_min_prob = args.condnet_min_prob
+    condnet_max_prob = args.condnet_max_prob
+    compact = args.compact
+    num_inputs = 28**2
 
+    mlp_model = SimpleCNN().to(device)
+    mlp_model.load_state_dict(torch.load('mlp_model_s=1.0_v=0.1_tau=0.32024-09-30_12-24-05.pt'))
+    adj_, nodes_ = adj(mlp_model)
+    adj_ = torch.stack([torch.Tensor(adj_) for _ in range(BATCH_SIZE)]).to(device)
+
+    gnn_policy = Gnn(minprob=condnet_min_prob, maxprob=condnet_max_prob, batch=BATCH_SIZE,
+                     conv_len=len(mlp_model.conv_layers), fc_len=len(mlp_model.fc_layers), adj_nodes=len(nodes_), hidden_size=args.hidden_size).to(device)
+    gnn_policy.load_state_dict(torch.load('gnn_policy_s=1.0_v=0.1_tau=0.32024-09-30_12-24-05.pt'))
+    # model = Condnet_model(args=args.parse_args())
 
     # datasets load mnist data
     train_dataset = datasets.CIFAR10(
@@ -433,55 +275,51 @@ def main():
         shuffle=False
     )
 
-    wandb.init(project="0.001cond_cnn_cifar10_edit",
+    wandb.init(project="condgtest",
                 config=args.__dict__,
-                name='0.3t0.001out_cond_cnn_cifar10_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                name='condg_cnn_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
                 )
 
-    # create model
-    model = model_condnet(args)
-    model.load_state_dict(torch.load('0.3t0.001out_cond_cnn_cifar10_s=0.1_v=0.01_tau=0.32024-09-12_10-04-49.pt'))
-
-    num_params = 0
-    for param in model.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
-
-    num_params = 0
-    for param in model.cnn.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
-
-    num_params = 0
-    for param in model.policy_net.parameters():
-        num_params += param.numel()
-    print('Number of parameters: {}'.format(num_params))
+    mlp_model.eval()
+    gnn_policy.eval()
 
     specificity = []  # 결과 저장용 리스트
     # us_values = []
     us_variances = []
+
     for i, data in enumerate(tqdm(test_loader, 0)):
         # get batch
         inputs, labels = data
+        # get batch
 
-        # get output
-        outputs, us, policies, sample_probs, layer_masks = model(inputs)
+        inputs = inputs.to(device)
+        outputs_1, hs = mlp_model(inputs)
 
-        us_mask = torch.cat(us, dim=1)
-        us_variances.append(np.var(us_mask.detach().cpu().numpy()))
+        current_batch_size = hs[0].shape[0]
+
+        if current_batch_size < BATCH_SIZE:
+            adj_batch = adj_[:current_batch_size]
+        else:
+            adj_batch = adj_  # 기본적으로 설정된 BATCH_SIZE 크기의 adj_ 사용
+
+        # print(adj_batch.size())  # 크기 확인
+
+        us, p = gnn_policy(hs, adj_batch)  # run gnn
+        us_variances.append(np.var(us.detach().cpu().numpy()))
+        outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
         # calculate accuracy
-        pred = torch.argmax(outputs, dim=1).to('cpu')
-        acc_cond = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
+        pred = torch.argmax(outputs.to('cpu'), dim=1)
+        acc_condg = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
 
         acc_random_shuffle = []
         for _ in range(100):
             # `us`를 랜덤하게 셔플링
-            idx = torch.randperm(us_mask.size(0))
-            shuffled_us = us_mask[idx]
+            idx = torch.randperm(us.size(0))
+            shuffled_us = us[idx]
 
             # 조건부 드롭을 적용하여 예측
-            outputs = model(inputs, cond_drop=True, us=shuffled_us)
+            outputs, _ = mlp_model(inputs, cond_drop=True, us=shuffled_us)
 
             # 정확도 계산
             pred = torch.argmax(outputs.to('cpu'), dim=1)
@@ -489,7 +327,7 @@ def main():
             acc_random_shuffle.append(acc)
 
         # 특정성 기록
-        specificity.append([acc_cond, *acc_random_shuffle])
+        specificity.append([acc_condg, *acc_random_shuffle])
 
         # 특정성 결과를 numpy 배열로 변환
     specificity = np.array(specificity)
@@ -510,5 +348,6 @@ def main():
     print("Variance of original `us` values (average across batches):", us_variance_mean)
 
     wandb.finish()
+
 if __name__ == '__main__':
     main()
