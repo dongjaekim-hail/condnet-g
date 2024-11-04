@@ -286,8 +286,6 @@ class model_condnet(nn.Module):
         layer_masks.append(u_i)
         # print(f"After FC3: {h.shape}")
 
-        h = F.softmax(h, dim=1)
-
         return h, policies, sample_probs, layer_masks
 
 def main():
