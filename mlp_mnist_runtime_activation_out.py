@@ -45,7 +45,7 @@ class model_activation(nn.Module):
 
             activations = h
 
-            activation_magnitudes = torch.norm(activations, dim=0)
+            activation_magnitudes = torch.norm(activations, dim=1)
 
             sorted_activation_magnitudes, _ = torch.sort(activation_magnitudes, descending=True)
 
@@ -55,7 +55,7 @@ class model_activation(nn.Module):
             mask = activation_magnitudes > threshold
 
             # 활성화 값을 마스크와 곱해 선택적으로 활성화
-            h = h * mask
+            h = h * mask.unsqueeze(1).float()
 
             # 생성된 마스크를 layer_masks 리스트에 추가
             layer_masks.append(mask.float())
@@ -65,7 +65,7 @@ class model_activation(nn.Module):
 
         activations = h
 
-        activation_magnitudes = torch.norm(activations, dim=0)
+        activation_magnitudes = torch.norm(activations, dim=1)
 
         sorted_activation_magnitudes, _ = torch.sort(activation_magnitudes, descending=True)
 
@@ -75,7 +75,7 @@ class model_activation(nn.Module):
         mask = activation_magnitudes > threshold
 
         # 활성화 값을 마스크와 곱해 선택적으로 활성화
-        h = h * mask
+        h = h * mask.unsqueeze(1).float()
 
         # 생성된 마스크를 layer_masks 리스트에 추가
         layer_masks.append(mask.float())
