@@ -433,7 +433,7 @@ def main():
             Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean()
             Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean()
 
-            L = c + lambda_s * (Lb_ + Le_)
+            L = c + lambda_s * (Lb_)
 
             Lv_ = -torch.norm(p.squeeze() - p.squeeze().mean(axis=0), p=2, dim=0).mean()
             # Lv_ = (-1)* (p.squeeze().var(axis=0).mean()).mean()
@@ -552,7 +552,7 @@ def main():
                 Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(tau).to(device), 2).mean()
                 Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(tau).to(device), 2).mean()
 
-                L = c + lambda_s * (Lb_ + Le_)
+                L = c + lambda_s * (Lb_)
 
                 Lv_ =  -torch.norm(p.squeeze() - p.squeeze().mean(axis=0), p=2, dim=0).mean()
                 L += lambda_v * Lv_
