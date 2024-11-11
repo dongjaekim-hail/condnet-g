@@ -415,7 +415,7 @@ class runtime_pruner(L.LightningModule):
             Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau).to(self.device), 2).mean()
             Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau).to(self.device), 2).mean()
 
-            L = c + self.lambda_s * (Lb_ + Le_)
+            L = c + self.lambda_s * (Lb_)
 
             Lv_ = -torch.norm(p.squeeze() - p.squeeze().mean(axis=0), p=2, dim=0).mean()
             # Lv_ = (-1)* (p.squeeze().var(axis=0).mean()).mean()
@@ -536,7 +536,7 @@ class runtime_pruner(L.LightningModule):
                 # Lb_, Le_, Lv_ 계산 및 손실에 추가
                 Lb_ = torch.pow(p.squeeze().mean(axis=0) - torch.tensor(self.tau).to(self.device), 2).mean()
                 Le_ = torch.pow(p.squeeze().mean(axis=1) - torch.tensor(self.tau).to(self.device), 2).mean()
-                L = c + self.lambda_s * (Lb_ + Le_)
+                L = c + self.lambda_s * (Lb_)
 
                 Lv_ = -torch.norm(p.squeeze() - p.squeeze().mean(axis=0), p=2, dim=0).mean()
                 L += self.lambda_v * Lv_
