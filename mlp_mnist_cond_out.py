@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import torch.optim as optim
 import torchvision
-from torchvision import transforms, datasets  # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
+from torchvision import transforms, datasets # 데이터를 다루기 위한 TorchVision 내의 Transforms와 datasets를 따로 임포트
 from tqdm import tqdm
 from tqdm import trange
 import torch.nn as nn
@@ -12,21 +12,20 @@ import wandb
 
 from datetime import datetime
 import os
-
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 import torch.nn.init as init
 
 
 class model_condnet(nn.Module):
-    def __init__(self, args):
+    def __init__(self,args):
         super().__init__()
         if torch.cuda.is_available():
             self.device = 'cuda'
         else:
             self.device = 'cpu'
 
-        self.input_dim = 28 * 28
+        self.input_dim = 28*28
         mlp_hidden = [512, 256, 10]
         output_dim = mlp_hidden[-1]
 
@@ -39,7 +38,7 @@ class model_condnet(nn.Module):
         self.mlp = nn.ModuleList()
         self.mlp.append(nn.Linear(self.input_dim, mlp_hidden[0]))
         for i in range(nlayers):
-            self.mlp.append(nn.Linear(mlp_hidden[i], mlp_hidden[i + 1]))
+            self.mlp.append(nn.Linear(mlp_hidden[i], mlp_hidden[i+1]))
         self.mlp.append(nn.Linear(mlp_hidden[nlayers], output_dim))
         self.mlp.to(self.device)
 
@@ -70,13 +69,13 @@ class model_condnet(nn.Module):
         self.policy_net = nn.ModuleList()
         temp = nn.ModuleList()
         # temp.append(nn.Linear(self.input_dim, mlp_hidden[0])) # BEFORE LARGE MODEL'S
-        temp.append(nn.Linear(self.input_dim, mlp_hidden[0]))
+        temp.append(nn.Linear(self.input_dim,  mlp_hidden[0]))
         self.policy_net.append(temp)
 
         for i in range(len(self.mlp) - 1):
             temp = nn.ModuleList()
             for j in range(n_each_policylayer):
-                temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i + 1].out_features))  # BEFORE LARGE MODEL'S
+                temp.append(nn.Linear(self.mlp[i].out_features, self.mlp[i+1].out_features)) # BEFORE LARGE MODEL'S
                 # temp.append(nn.Linear(self.mlp[i].out_features, mlp_hidden[i]))
             self.policy_net.append(temp)
         self.policy_net.to(self.device)
@@ -104,7 +103,7 @@ class model_condnet(nn.Module):
         h = x
         u = torch.ones(h.shape[0], h.shape[1]).to(self.device)
 
-        for i in range(len(self.mlp) - 1):
+        for i in range(len(self.mlp)-1):
 
             # param_min = 0
             # param_max = 0
@@ -117,6 +116,7 @@ class model_condnet(nn.Module):
             #     if param_min > param.min():
             #         param_min = param.min().item()
             # # print('param_min:', param_min, 'param_max', param_max)
+
 
             h_clone = h.clone()
             p_is = self.policy_net[i][0](h_clone.detach())
@@ -152,15 +152,15 @@ class model_condnet(nn.Module):
             # u_i = torch.ones(u_i.shape[0], u_i.shape[1])
 
             if u_i.sum() == 0:
-                idx = np.random.uniform(0, u_i.shape[0], size=(1)).astype(np.int16)
+                idx = np.random.uniform(0, u_i.shape[0], size = (1)).astype(np.int16)
                 u_i[idx] = 1
 
-            sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
+            sampling_prob = p_i * u_i + (1-p_i) * (1-u_i)
 
             # idx = torch.where(u_i == 0)[0]
 
             # h_next = F.relu(self.mlp[i](h*u.detach()))*u_i
-            h_next = F.relu(self.mlp[i](h * u)) * u_i
+            h_next = F.relu(self.mlp[i](h*u))*u_i
             h = h_next
             u = u_i
 
@@ -206,7 +206,7 @@ class model_condnet(nn.Module):
             u_i[idx] = 1
 
         sampling_prob = p_i * u_i + (1 - p_i) * (1 - u_i)
-        h_next = (self.mlp[-1](h * u)) * u_i
+        h_next = (self.mlp[-1](h*u))*u_i
         h = h_next
         u = u_i
 
@@ -215,6 +215,7 @@ class model_condnet(nn.Module):
         layer_masks.append(u_i)
 
         h = F.softmax(h, dim=1)
+
 
         return h, policies, sample_probs, layer_masks
 
@@ -225,7 +226,7 @@ def main():
     dt_string = now.strftime("%Y-%m-%d_%H-%M-%S")
     import argparse
     args = argparse.ArgumentParser()
-    args.add_argument('--nlayers', type=int, default=3)
+    args.add_argument('--nlayers', type=int, default=1)
     args.add_argument('--lambda_s', type=float, default=7)
     args.add_argument('--lambda_v', type=float, default=0.2)
     args.add_argument('--lambda_l2', type=float, default=5e-4)
@@ -238,6 +239,8 @@ def main():
     args.add_argument('--BATCH_SIZE', type=int, default=256)
     args.add_argument('--compact', type=bool, default=False)
     args.add_argument('--hidden-size', type=int, default=32)
+    args.add_argument('--warmup', type=int, default=0)
+    args.add_argument('--multi', type=float, default=0.99)
     args = args.parse_args()
     lambda_s = args.lambda_s
     lambda_v = args.lambda_v
@@ -248,6 +251,7 @@ def main():
     max_epochs = args.max_epochs
     BATCH_SIZE = args.BATCH_SIZE
 
+
     # datasets load mnist data
     train_dataset = datasets.MNIST(
         root="../data/mnist",
@@ -256,12 +260,14 @@ def main():
         transform=transforms.ToTensor()
     )
 
+
     test_dataset = datasets.MNIST(
         root="../data/mnist",
         train=False,
         download=True,
         transform=transforms.ToTensor()
     )
+
 
     train_loader = torch.utils.data.DataLoader(
         dataset=train_dataset,
@@ -275,10 +281,10 @@ def main():
     )
 
     wandb.init(project="condg_mlp",
-               entity="hails",
-               config=args.__dict__,
-               name='cond_mlp_schedule_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
-               )
+                entity="hails",
+                config=args.__dict__,
+                name='cond_mlp_schedule_s=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(args.tau)
+                )
 
     # create model
     model = model_condnet(args)
@@ -301,19 +307,18 @@ def main():
 
     C = nn.CrossEntropyLoss()
     mlp_optimizer = optim.SGD(model.parameters(), lr=learning_rate,
-                              momentum=0.9, weight_decay=lambda_l2)
+                          momentum=0.9, weight_decay=lambda_l2)
     # mlp_optimizer = optim.SGD(model.mlp.parameters(), lr=learning_rate,
     #                       momentum=0.9, weight_decay=lambda_l2)
     policy_optimizer = optim.SGD(model.policy_net.parameters(), lr=learning_rate,
-                                 momentum=0.9, weight_decay=lambda_l2)
-
+                            momentum=0.9, weight_decay=lambda_l2)
     # policy_optimizer = optim.Adam(model.policy_net.parameters(), lr=0.001, weight_decay=1e-4)
 
     def lr_lambda(epoch):
         if epoch < args.warmup:
             return 0.0  # 처음 warmup 에포크 동안 학습률 0
         else:
-            return args.learning_rate * args.multi ** (epoch - args.warmup)  # warmup 이후에는 지수적으로 증가
+            return args.lr * args.multi ** (epoch - args.warmup)  # warmup 이후에는 지수적으로 증가
 
     policy_scheduler = torch.optim.lr_scheduler.LambdaLR(policy_optimizer, lr_lambda)
 
@@ -341,7 +346,7 @@ def main():
             # 변화도(Gradient) 매개변수를 0으로 만들고
 
             # 순전파 + 역전파 + 최적화를 한 후
-            outputs, policies, sample_probs, layer_masks = model(inputs)
+            outputs, policies, sample_probs, layer_masks  = model(inputs)
 
             # make labels one hot vector
             y_one_hot = torch.zeros(labels.shape[0], 10)
@@ -351,11 +356,11 @@ def main():
             # Compute the regularization loss L
 
             policy_flat = torch.cat(policies, dim=1)
-            Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), p=2)
-            Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), p=2) / len(policies)
+            Lb_ = torch.pow(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean()
+            Le_ = torch.pow(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), 2).mean()
 
             # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
-            Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
+            Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).mean()
 
             L = c + lambda_s * (Lb_)
             # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
@@ -375,6 +380,7 @@ def main():
             # Compute the policy gradient (PG) loss
             logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
+
 
             PG.backward()  # it needs to be checked [TODO]
 
@@ -403,21 +409,17 @@ def main():
             taus += tau_
             Ls += L.to('cpu').item()
             # wandb log training/batch
-            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(),
-                       'train/batch_loss': L.item(), 'train/batch_tau': tau_, 'train/batch_Lb': Lb_,
-                       'train/batch_Le': Le_, 'train/batch_Lv': Lv_})
+            wandb.log({'train/batch_cost': c.item(), 'train/batch_acc': acc, 'train/batch_pg': PG.item(), 'train/batch_loss': L.item(), 'train/batch_tau': tau_, 'train/batch_Lb': Lb_, 'train/batch_Le': Le_, 'train/batch_Lv': Lv_})
 
             # print PG.item(), and acc with name
-            print(
-                'Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Lb {:.3f}, Lv {:.3f}, Acc: {:.3f}, Tau: {:.3f}'.format(
-                    epoch, i, c.item(), PG.item(), Lb_, Lv_, acc, tau_))
+            print('Epoch: {}, Batch: {}, Cost: {:.10f}, PG:{:.5f}, Lb {:.3f}, Lv {:.3f}, Acc: {:.3f}, Tau: {:.3f}'.format(epoch, i, c.item(), PG.item(), Lb_, Lv_, acc, tau_))
 
             # wandb log training/epoch
-        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus / bn,
-                   'train/epoch_PG': PGs / bn, 'train/epoch_PG': Ls / bn})
+        wandb.log({'train/epoch_cost': costs / bn, 'train/epoch_acc': accs / bn, 'train/epoch_tau': taus / bn, 'train/epoch_PG': PGs/bn, 'train/epoch_PG': Ls/bn})
 
         # print epoch and epochs costs and accs
         print('Epoch: {}, Cost: {}, Accuracy: {}'.format(epoch, costs / bn, accs / bn))
+
 
         costs = 0
         accs = 0
@@ -439,7 +441,7 @@ def main():
 
                 # make one hot vector
                 y_batch_one_hot = torch.zeros(labels.shape[0], 10)
-                y_batch_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1, ).tolist()] = 1
+                y_batch_one_hot[torch.arange(labels.shape[0]), labels.reshape(-1,).tolist()] = 1
 
                 # get output
                 outputs, policies, sample_probs, layer_masks = model(torch.tensor(inputs))
@@ -452,8 +454,8 @@ def main():
 
                 # Compute the regularization loss L
                 policy_flat = torch.cat(policies, dim=1)
-                Lb_ = torch.norm(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), p=2)
-                Le_ = torch.norm(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), p=2) / len(policies)
+                Lb_ = torch.pow(policy_flat.mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean()
+                Le_ = torch.pow(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), 2).mean()
 
                 # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
                 Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
@@ -477,6 +479,7 @@ def main():
                 logp = torch.log(policy_flat).sum(axis=1).mean()
                 PG = lambda_pg * c * (-logp) + L
 
+
                 # calculate accuracy
                 pred = torch.argmax(outputs, dim=1).to('cpu')
                 acc = torch.sum(pred == torch.tensor(labels.reshape(-1))).item() / labels.shape[0]
@@ -493,7 +496,7 @@ def main():
                 us = torch.cat(layer_masks, dim=1)
                 tau_ = us.mean().detach().item()
                 taus += tau_
-            # print accuracy
+            #print accuracy
             print('Test Accuracy: {}'.format(accs / bn))
             # wandb log test/epoch
             wandb.log({'test/epoch_cost': costs / bn, 'test/epoch_acc': accs / bn,
@@ -502,7 +505,5 @@ def main():
                    './cond_mlp_schedule_' + 's=' + str(args.lambda_s) + '_v=' + str(args.lambda_v) + '_tau=' + str(
                        args.tau) + dt_string + '.pt')
     wandb.finish()
-
-
-if __name__ == '__main__':
+if __name__=='__main__':
     main()
