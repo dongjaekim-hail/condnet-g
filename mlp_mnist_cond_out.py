@@ -381,7 +381,6 @@ def main():
             logp = torch.log(policy_flat).sum(axis=1).mean()
             PG = lambda_pg * c * (-logp) + L
 
-
             PG.backward()  # it needs to be checked [TODO]
 
             # # gradient에 NaN 및 큰 값 체크
@@ -458,7 +457,7 @@ def main():
                 Le_ = torch.pow(policy_flat.mean(axis=1) - torch.tensor(tau).to(model.device), 2).mean()
 
                 # Lv_ = -torch.pow(policy_flat - policy_flat.mean(axis=0),2).mean(axis=0).sum()
-                Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).sum()
+                Lv_ = -torch.norm(policy_flat - policy_flat.mean(axis=0), p=2, dim=0).mean()
 
                 L = c + lambda_s * (Lb_)
                 # (torch.pow(torch.cat(policies, dim=1).mean(axis=0) - torch.tensor(tau).to(model.device), 2).mean() +
