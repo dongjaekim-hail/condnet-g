@@ -47,6 +47,10 @@ epoch_tau_values = history["test/epoch_tau"].dropna().tolist()
 steps = history["_step"].dropna().tolist()
 scaled_values = [value * 0.7 for value in epoch_tau_values]
 
+print("Step-wise calculated values:")
+for step, value in zip(steps, scaled_values):
+    print(f"Step: {step}, Scaled Value: {value}")
+
 plot_df = pd.DataFrame({
     "Step": steps,
     "Scaled Value": scaled_values
