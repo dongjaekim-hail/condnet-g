@@ -47,8 +47,8 @@ for name, df in dataframes.items():
     plt.plot(df["Step"], df["Scaled Value"], marker="o", linestyle="-", label=name)
 
 plt.xlabel("Step")
-plt.ylabel("Scaled Value")
-plt.title("Scaled test/epoch_tau vs Step for Multiple Runs")
+plt.ylabel("Flops")
+plt.title("Flops for Multiple Runs")
 plt.legend()
 plt.grid(True)
 plt.xlim(left=0)
