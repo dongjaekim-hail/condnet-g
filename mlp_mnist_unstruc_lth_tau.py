@@ -94,7 +94,7 @@ def main(ITE=0):
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="condg_mlp", entity='hails', name='st_mlp_mnist_lth', config=args.__dict__)
+    wandb.init(project="condg_mlp", entity='hails', name='unst_mlp_mnist_lth', config=args.__dict__)
     wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -132,9 +132,9 @@ def main(ITE=0):
 
     # Copying and Saving Initial State
     initial_state_dict = copy.deepcopy(model.state_dict())
-    checkdir(f"{os.getcwd()}/saves/stmlptau/mnist/")
+    checkdir(f"{os.getcwd()}/saves/unstmlptau/mnist/")
     torch.save(model,
-               f"{os.getcwd()}/saves/stmlptau/mnist/initial_state_dict_{args.prune_type}.pth.tar")
+               f"{os.getcwd()}/saves/unstmlptau/mnist/initial_state_dict_{args.prune_type}.pth.tar")
 
     # Making Initial Mask
     make_mask(model)
@@ -192,8 +192,8 @@ def main(ITE=0):
                 # Save Weights
                 if test_accuracy > best_accuracy:
                     best_accuracy = test_accuracy
-                    checkdir(f"{os.getcwd()}/saves/stmlptau/mnist/")
-                    torch.save(model, f"{os.getcwd()}/saves/stmlptau/mnist/{_ite}_model_{args.prune_type}.pth.tar")
+                    checkdir(f"{os.getcwd()}/saves/unstmlptau/mnist/")
+                    torch.save(model, f"{os.getcwd()}/saves/unstmlptau/mnist/{_ite}_model_{args.prune_type}.pth.tar")
 
             # Training
             train_loss, train_accuracy, train_tau, train_std = train(model, train_loader, optimizer, criterion)
@@ -218,7 +218,7 @@ def main(ITE=0):
                      f'Pruning Iteration {_ite}/train/epoch_tau': train_tau,
                      f'Pruning Iteration {_ite}/test/epoch_tau': test_tau})
 
-        torch.save(model.state_dict(), f"{os.getcwd()}/saves/stmlptau/mnist/{_ite}_model_{args.prune_type}_final.pth.tar")
+        torch.save(model.state_dict(), f"{os.getcwd()}/saves/unstmlptau/mnist/{_ite}_model_{args.prune_type}_final.pth.tar")
         writer.add_scalar('Accuracy/test', best_accuracy, comp1)
         bestacc[_ite] = best_accuracy
 
@@ -228,26 +228,26 @@ def main(ITE=0):
         plt.plot(np.arange(1, (args.end_iter) + 1),
                  100 * (all_loss - np.min(all_loss)) / np.ptp(all_loss).astype(float), c="blue", label="Loss")
         plt.plot(np.arange(1, (args.end_iter) + 1), all_accuracy, c="red", label="Accuracy")
-        plt.title(f"Loss Vs Accuracy Vs Iterations (mnist,stmlptau)")
+        plt.title(f"Loss Vs Accuracy Vs Iterations (mnist,unstmlptau)")
         plt.xlabel("Iterations")
         plt.ylabel("Loss and Accuracy")
         plt.legend()
         plt.grid(color="gray")
-        checkdir(f"{os.getcwd()}/plots/lt/stmlptau/mnist/")
+        checkdir(f"{os.getcwd()}/plots/lt/unstmlptau/mnist/")
         plt.savefig(
-            f"{os.getcwd()}/plots/lt/stmlptau/mnist/{args.prune_type}_LossVsAccuracy_{comp1}.png",
+            f"{os.getcwd()}/plots/lt/unstmlptau/mnist/{args.prune_type}_LossVsAccuracy_{comp1}.png",
             dpi=1200)
         plt.close()
 
         # Dump Plot values
-        checkdir(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/")
-        all_loss.dump(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/{args.prune_type}_all_loss_{comp1}.dat")
+        checkdir(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/")
+        all_loss.dump(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/{args.prune_type}_all_loss_{comp1}.dat")
         all_accuracy.dump(
-            f"{os.getcwd()}/dumps/lt/stmlptau/mnist/{args.prune_type}_all_accuracy_{comp1}.dat")
+            f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/{args.prune_type}_all_accuracy_{comp1}.dat")
 
         # Dumping mask
-        checkdir(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/")
-        with open(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/{args.prune_type}_mask_{comp1}.pkl",
+        checkdir(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/")
+        with open(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/{args.prune_type}_mask_{comp1}.pkl",
                   'wb') as fp:
             pickle.dump(mask, fp)
 
@@ -257,22 +257,22 @@ def main(ITE=0):
         all_accuracy = np.zeros(args.end_iter, float)
 
     # Dumping Values for Plotting
-    checkdir(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/")
-    comp.dump(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/{args.prune_type}_compression.dat")
-    bestacc.dump(f"{os.getcwd()}/dumps/lt/stmlptau/mnist/{args.prune_type}_bestaccuracy.dat")
+    checkdir(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/")
+    comp.dump(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/{args.prune_type}_compression.dat")
+    bestacc.dump(f"{os.getcwd()}/dumps/lt/unstmlptau/mnist/{args.prune_type}_bestaccuracy.dat")
 
     # Plotting
     a = np.arange(args.prune_iterations)
     plt.plot(a, bestacc, c="blue", label="Winning tickets")
-    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (mnist,stmlptau)")
+    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (mnist,unstmlptau)")
     plt.xlabel("Unpruned Weights Percentage")
     plt.ylabel("test accuracy")
     plt.xticks(a, comp, rotation="vertical")
     plt.ylim(0, 100)
     plt.legend()
     plt.grid(color="gray")
-    checkdir(f"{os.getcwd()}/plots/lt/stmlptau/mnist/")
-    plt.savefig(f"{os.getcwd()}/plots/lt/stmlptau/mnist/{args.prune_type}_AccuracyVsWeights.png",
+    checkdir(f"{os.getcwd()}/plots/lt/unstmlptau/mnist/")
+    plt.savefig(f"{os.getcwd()}/plots/lt/unstmlptau/mnist/{args.prune_type}_AccuracyVsWeights.png",
                 dpi=1200)
     plt.close()
 
@@ -282,6 +282,7 @@ def main(ITE=0):
     wandb.finish()
 
 
+# Function for Training
 def train(model, train_loader, optimizer, criterion):
     EPS = 1e-6
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -299,7 +300,7 @@ def train(model, train_loader, optimizer, criterion):
         train_loss = criterion(output, targets)
         train_loss.backward()
 
-        # Freezing pruned weights by making their gradients zero
+        # Freezing Pruned weights by making their gradients Zero
         for name, p in model.named_parameters():
             if 'weight' in name:
                 tensor = p.data.cpu().numpy()
@@ -340,9 +341,7 @@ def train(model, train_loader, optimizer, criterion):
     return epoch_loss, accuracy, tau, accuracy_std
 
 
-
-
-
+# Function for Testing
 def test(model, test_loader, criterion):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
@@ -383,50 +382,7 @@ def test(model, test_loader, criterion):
     return accuracy, tau, accuracy_std
 
 
-
-
-
-
-
-# # Prune by Percentile module
-# def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
-#     global step
-#     global mask
-#     global model
-#
-#     step = 0
-#     for name, param in model.named_parameters():
-#
-#         if 'weight' in name:
-#             if "fc" in name:
-#                 tensor = abs(param.data.cpu().numpy())
-#                 shape_param = tensor.shape
-#                 tensor = tensor.mean(axis=1)
-#                 percentile_value = np.percentile(tensor, fc_percent)
-#             else:
-#                 tensor = abs(param.data.cpu().numpy())
-#                 shape_param = tensor.shape
-#                 tensor = tensor.reshape(tensor.shape[0], -1).mean(axis=1)
-#                 percentile_value = np.percentile(tensor, conv_percent)
-#
-#             tensor2prune = param.data.cpu().numpy()
-#             weight_dev = param.device
-#             mask_in_structure = np.ones_like(tensor)
-#             new_mask = np.where(abs(tensor) < percentile_value, 0, mask_in_structure)
-#
-#             # make mask in structure to be same shape with shape_param (for example, use np.repeat or something to make 64 to 64, 3, 3, 3)
-#             mask_in_shape = np.ones(shape_param)
-#             if "fc" in name:
-#                 mask_in_shape = mask_in_shape * new_mask[:, None]
-#             else:
-#                 mask_in_shape = mask_in_shape * new_mask[:, None, None, None]
-#
-#
-#             param.data = torch.from_numpy(tensor2prune * mask_in_shape).float().to(weight_dev)
-#             mask[step] = mask_in_shape
-#             step += 1
-#     step = 0
-
+# Prune by Percentile module
 def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
     global step
     global mask
@@ -434,39 +390,21 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
 
     step = 0
     for name, param in model.named_parameters():
+
         if 'weight' in name:
-            print(f"Processing layer: {name} with shape {param.shape}")
-            if "fc" in name:
-                tensor = abs(param.data.cpu().numpy())
-                shape_param = tensor.shape
-                tensor = tensor.mean(axis=1)  # Compute mean across axis 1 for FC layers
-                percentile_value = np.percentile(tensor, fc_percent)
-            else:  # For convolutional layers
-                tensor = abs(param.data.cpu().numpy())
-                shape_param = tensor.shape
-                tensor = tensor.reshape(tensor.shape[0], -1).mean(axis=1)  # Flatten and compute mean
-                percentile_value = np.percentile(tensor, conv_percent)
-
-            print(f"Percentile value ({name}): {percentile_value}")
-
-            tensor2prune = param.data.cpu().numpy()
-            weight_dev = param.device
-            mask_in_structure = np.ones_like(tensor)
-            new_mask = np.where(abs(tensor) < percentile_value, 0, mask_in_structure)
-
-            # Reshape the mask to match the parameter's shape
-            mask_in_shape = np.ones(shape_param)
-            if "fc" in name:
-                mask_in_shape = mask_in_shape * new_mask[:, None]  # Expand for FC layers
+            if "fc.weight" in name:
+                percentile_value = np.percentile(abs(param.data.cpu().numpy()), fc_percent)
             else:
-                mask_in_shape = mask_in_shape * new_mask[:, None, None, None]  # Expand for Conv layers
+                percentile_value = np.percentile(abs(param.data.cpu().numpy()), conv_percent)
 
-            param.data = torch.from_numpy(tensor2prune * mask_in_shape).float().to(weight_dev)
-            mask[step] = mask_in_shape
-            print(f"Applied mask to layer: {name}, Non-zero weights: {np.sum(mask_in_shape != 0)}")
+            tensor = param.data.cpu().numpy()
+            weight_dev = param.device
+            new_mask = np.where(abs(tensor) < percentile_value, 0, mask[step])
+
+            param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
+            mask[step] = new_mask
             step += 1
     step = 0
-
 
 # Function to make an empty mask of the same size as the model
 def make_mask(model):
@@ -493,7 +431,7 @@ def original_initialization(mask_temp, initial_state_dict):
     for name, param in model.named_parameters():
         if "weight" in name:
             weight_dev = param.device
-            param.data = torch.from_numpy(mask_temp[step] * initial_state_dict[name].cpu().numpy()).float().to(weight_dev)
+            param.data = torch.from_numpy(mask_temp[step] * initial_state_dict[name].cpu().numpy()).to(weight_dev)
             step = step + 1
         if "bias" in name:
             param.data = initial_state_dict[name]
