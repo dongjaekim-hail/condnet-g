@@ -187,7 +187,7 @@ def main(ITE=0):
         for iter_ in pbar:
             # Frequency for Testing
             if iter_ % args.valid_freq == 0:
-                test_accuracy, test_tau, test_std = test(model, test_loader, criterion)
+                test_accuracy, test_tau, test_std, test_loss = test(model, test_loader, criterion)
 
                 # Save Weights
                 if test_accuracy > best_accuracy:
@@ -205,11 +205,12 @@ def main(ITE=0):
                 pbar.write(
                     f'Train Epoch: {iter_}/{args.end_iter} Train Loss: {train_loss:.6f} Train Accuracy: {train_accuracy:.2f}% Test Accuracy: {test_accuracy:.2f}% Best Test Accuracy: {best_accuracy:.2f}%')
                 wandb.log(
-                    {'train/epoch_L': train_loss, 'train/epoch_acc': train_accuracy, 'train/epoch_acc_std': train_std,
+                    {'train/epoch_L': train_loss, 'test/epoch_L': test_loss, 'train/epoch_acc': train_accuracy, 'train/epoch_acc_std': train_std,
                      'test/epoch_acc': test_accuracy, 'test/epoch_acc_std': test_std,
                      'Best Test Accuracy': best_accuracy})
                 wandb.log(
                     {f'Pruning Iteration {_ite}/train/epoch_L': train_loss,
+                     f'Pruning Iteration {_ite}/test/epoch_L': test_loss,
                      f'Pruning Iteration {_ite}/train/epoch_acc': train_accuracy,
                      f'Pruning Iteration {_ite}/train/epoch_acc_std': train_std,  # 훈련 정확도 표준편차 추가
                      f'Pruning Iteration {_ite}/test/epoch_acc': test_accuracy,
@@ -354,7 +355,7 @@ def test(model, test_loader, criterion):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
+            test_loss += criterion(output, target)
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
             batch_correct = pred.eq(target.data.view_as(pred)).sum().item()
             batch_total = target.size(0)
@@ -374,13 +375,13 @@ def test(model, test_loader, criterion):
             total_weights += tensor.size  # Total number of weights
     tau = active_weights / total_weights  # Active weights ratio
 
-    test_loss /= len(test_loader.dataset)
+    test_loss /= len(test_loader)
     accuracy = correct / len(test_loader.dataset)
     accuracy_std = np.std(batch_accuracies)  # std 계산
 
     # Log epoch-level metrics to WandB
     wandb.log({'test/epoch_tau': tau})
-    return accuracy, tau, accuracy_std
+    return accuracy, tau, accuracy_std, test_loss
 
 
 
