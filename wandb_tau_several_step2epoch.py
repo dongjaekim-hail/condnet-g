@@ -13,7 +13,7 @@ api = Api()
 runs = api.runs("hails/condg_mlp")
 
 # 4. 특정 run 두 개 찾기
-run_names = ["cond_mlp_schedule_s=7_v=0.2_tau=0.4", "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11", "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02", "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-"]
+run_names = ["unst_mlp_mnist_lth", "cond_mlp_schedule_s=7_v=0.2_tau=0.4", "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11", "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02", "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-"]
 found_runs = {}
 
 for run in runs:
@@ -29,8 +29,12 @@ if len(found_runs) != len(run_names):
 # 6. 각 run의 로그 데이터 추출
 dataframes = {}
 for name, run in found_runs.items():
-    history = run.history(keys=["test/epoch_tau"])
-    epoch_tau_values = history["test/epoch_tau"].dropna().tolist()
+    if name == "unst_mlp_mnist_lth":
+        history = run.history(keys=["Pruning Iteration 1/test/epoch_tau"])
+        epoch_tau_values = history["Pruning Iteration 1/test/epoch_tau"].dropna().tolist()
+    else:
+        history = run.history(keys=["test/epoch_tau"])
+        epoch_tau_values = history["test/epoch_tau"].dropna().tolist()
     # steps = history["_step"].dropna().tolist()
     # Step을 1, 2, 3,... 순으로 설정
     steps = list(range(1, len(epoch_tau_values) + 1))
