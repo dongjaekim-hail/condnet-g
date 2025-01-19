@@ -82,15 +82,15 @@ def main(ITE=0):
     parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=20, type=int)
+    parser.add_argument("--end_iter", default=1, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--prune_type", default="lt", type=str, help="lt | reinit")
     parser.add_argument("--gpu", default="0", type=str)
-    parser.add_argument("--prune_percent", default=40, type=int, help="Pruning percent")
-    parser.add_argument("--prune_percent_conv", default=40, type=int, help="Pruning percent for conv layers")
-    parser.add_argument("--prune_percent_fc", default=40, type=int, help="Pruning percent for fc layers")
+    parser.add_argument("--prune_percent", default=10, type=int, help="Pruning percent")
+    parser.add_argument("--prune_percent_conv", default=10, type=int, help="Pruning percent for conv layers")
+    parser.add_argument("--prune_percent_fc", default=10, type=int, help="Pruning percent for fc layers")
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
@@ -468,7 +468,7 @@ def test(model, test_loader, criterion):
 #             step += 1
 #     step = 0
 
-def prune_by_percentile(conv_percent, fc_percent, reinit=False, **kwargs):
+def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
     global step
     global mask
     global model
@@ -481,8 +481,8 @@ def prune_by_percentile(conv_percent, fc_percent, reinit=False, **kwargs):
             # Fully Connected Layer
             if "fc" in name:
                 # 남아있는 가중치의 행(Row) 단위로 L2 노름 계산
-                alive = tensor * mask[step]  # 현재 남아있는 가중치
-                row_norms = np.linalg.norm(alive, axis=1)
+                # alive = tensor * mask[step]  # 현재 남아있는 가중치
+                row_norms = np.linalg.norm(tensor, axis=1)
                 percentile_value = np.percentile(row_norms[row_norms > 0], fc_percent)
 
                 # 마스크 업데이트: 행 단위로 제거
@@ -491,8 +491,8 @@ def prune_by_percentile(conv_percent, fc_percent, reinit=False, **kwargs):
             # Convolutional Layer
             else:
                 # 남아있는 가중치의 필터 단위로 L2 노름 계산
-                alive = tensor * mask[step]  # 현재 남아있는 가중치
-                filter_norms = np.linalg.norm(alive.reshape(alive.shape[0], -1), axis=1)
+                # alive = tensor * mask[step]  # 현재 남아있는 가중치
+                filter_norms = np.linalg.norm(tensor.reshape(tensor.shape[0], -1), axis=1)
                 percentile_value = np.percentile(filter_norms[filter_norms > 0], conv_percent)
 
                 # 마스크 업데이트: 필터 단위로 제거
