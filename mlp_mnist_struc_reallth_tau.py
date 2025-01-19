@@ -82,19 +82,19 @@ def main(ITE=0):
     parser.add_argument("--lr", default=0.1, type=float, help="Learning rate")
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--start_iter", default=0, type=int)
-    parser.add_argument("--end_iter", default=1, type=int)
+    parser.add_argument("--end_iter", default=30, type=int)
     parser.add_argument("--print_freq", default=1, type=int)
     parser.add_argument("--valid_freq", default=1, type=int)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--prune_type", default="lt", type=str, help="lt | reinit")
     parser.add_argument("--gpu", default="0", type=str)
-    parser.add_argument("--prune_percent", default=10, type=int, help="Pruning percent")
-    parser.add_argument("--prune_percent_conv", default=10, type=int, help="Pruning percent for conv layers")
-    parser.add_argument("--prune_percent_fc", default=10, type=int, help="Pruning percent for fc layers")
+    parser.add_argument("--prune_percent", default=20, type=int, help="Pruning percent")
+    parser.add_argument("--prune_percent_conv", default=20, type=int, help="Pruning percent for conv layers")
+    parser.add_argument("--prune_percent_fc", default=20, type=int, help="Pruning percent for fc layers")
     parser.add_argument("--prune_iterations", default=30, type=int, help="Pruning iterations count")
     args = parser.parse_args()
 
-    wandb.init(project="condg_mlp", entity='hails', name='st_mlp_mnist_lth', config=args.__dict__)
+    wandb.init(project="condg_mlp", entity='hails', name='st_mlp_mnist_lth_real', config=args.__dict__)
     wandb.login(key="e927f62410230e57c5ef45225bd3553d795ffe01")
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -132,9 +132,9 @@ def main(ITE=0):
 
     # Copying and Saving Initial State
     initial_state_dict = copy.deepcopy(model.state_dict())
-    checkdir(f"{os.getcwd()}/saves/testtest/mnist/")
+    checkdir(f"{os.getcwd()}/saves/stmlpreal/mnist/")
     torch.save(model,
-               f"{os.getcwd()}/saves/testtest/mnist/initial_state_dict_{args.prune_type}.pth.tar")
+               f"{os.getcwd()}/saves/stmlpreal/mnist/initial_state_dict_{args.prune_type}.pth.tar")
 
     # Making Initial Mask
     make_mask(model)
@@ -192,8 +192,8 @@ def main(ITE=0):
                 # Save Weights
                 if test_accuracy > best_accuracy:
                     best_accuracy = test_accuracy
-                    checkdir(f"{os.getcwd()}/saves/testtest/mnist/")
-                    torch.save(model, f"{os.getcwd()}/saves/testtest/mnist/{_ite}_model_{args.prune_type}.pth.tar")
+                    checkdir(f"{os.getcwd()}/saves/stmlpreal/mnist/")
+                    torch.save(model, f"{os.getcwd()}/saves/stmlpreal/mnist/{_ite}_model_{args.prune_type}.pth.tar")
 
             # Training
             train_loss, train_accuracy, train_tau, train_std = train(model, train_loader, optimizer, criterion)
@@ -219,7 +219,7 @@ def main(ITE=0):
                      f'Pruning Iteration {_ite}/train/epoch_tau': train_tau,
                      f'Pruning Iteration {_ite}/test/epoch_tau': test_tau})
 
-        torch.save(model.state_dict(), f"{os.getcwd()}/saves/testtest/mnist/{_ite}_model_{args.prune_type}_final.pth.tar")
+        torch.save(model.state_dict(), f"{os.getcwd()}/saves/stmlpreal/mnist/{_ite}_model_{args.prune_type}_final.pth.tar")
         writer.add_scalar('Accuracy/test', best_accuracy, comp1)
         bestacc[_ite] = best_accuracy
 
@@ -229,26 +229,26 @@ def main(ITE=0):
         plt.plot(np.arange(1, (args.end_iter) + 1),
                  100 * (all_loss - np.min(all_loss)) / np.ptp(all_loss).astype(float), c="blue", label="Loss")
         plt.plot(np.arange(1, (args.end_iter) + 1), all_accuracy, c="red", label="Accuracy")
-        plt.title(f"Loss Vs Accuracy Vs Iterations (mnist,testtest)")
+        plt.title(f"Loss Vs Accuracy Vs Iterations (mnist,stmlpreal)")
         plt.xlabel("Iterations")
         plt.ylabel("Loss and Accuracy")
         plt.legend()
         plt.grid(color="gray")
-        checkdir(f"{os.getcwd()}/plots/lt/testtest/mnist/")
+        checkdir(f"{os.getcwd()}/plots/lt/stmlpreal/mnist/")
         plt.savefig(
-            f"{os.getcwd()}/plots/lt/testtest/mnist/{args.prune_type}_LossVsAccuracy_{comp1}.png",
+            f"{os.getcwd()}/plots/lt/stmlpreal/mnist/{args.prune_type}_LossVsAccuracy_{comp1}.png",
             dpi=1200)
         plt.close()
 
         # Dump Plot values
-        checkdir(f"{os.getcwd()}/dumps/lt/testtest/mnist/")
-        all_loss.dump(f"{os.getcwd()}/dumps/lt/testtest/mnist/{args.prune_type}_all_loss_{comp1}.dat")
+        checkdir(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/")
+        all_loss.dump(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/{args.prune_type}_all_loss_{comp1}.dat")
         all_accuracy.dump(
-            f"{os.getcwd()}/dumps/lt/testtest/mnist/{args.prune_type}_all_accuracy_{comp1}.dat")
+            f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/{args.prune_type}_all_accuracy_{comp1}.dat")
 
         # Dumping mask
-        checkdir(f"{os.getcwd()}/dumps/lt/testtest/mnist/")
-        with open(f"{os.getcwd()}/dumps/lt/testtest/mnist/{args.prune_type}_mask_{comp1}.pkl",
+        checkdir(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/")
+        with open(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/{args.prune_type}_mask_{comp1}.pkl",
                   'wb') as fp:
             pickle.dump(mask, fp)
 
@@ -258,22 +258,22 @@ def main(ITE=0):
         all_accuracy = np.zeros(args.end_iter, float)
 
     # Dumping Values for Plotting
-    checkdir(f"{os.getcwd()}/dumps/lt/testtest/mnist/")
-    comp.dump(f"{os.getcwd()}/dumps/lt/testtest/mnist/{args.prune_type}_compression.dat")
-    bestacc.dump(f"{os.getcwd()}/dumps/lt/testtest/mnist/{args.prune_type}_bestaccuracy.dat")
+    checkdir(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/")
+    comp.dump(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/{args.prune_type}_compression.dat")
+    bestacc.dump(f"{os.getcwd()}/dumps/lt/stmlpreal/mnist/{args.prune_type}_bestaccuracy.dat")
 
     # Plotting
     a = np.arange(args.prune_iterations)
     plt.plot(a, bestacc, c="blue", label="Winning tickets")
-    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (mnist,testtest)")
+    plt.title(f"Test Accuracy vs Unpruned Weights Percentage (mnist,stmlpreal)")
     plt.xlabel("Unpruned Weights Percentage")
     plt.ylabel("test accuracy")
     plt.xticks(a, comp, rotation="vertical")
     plt.ylim(0, 100)
     plt.legend()
     plt.grid(color="gray")
-    checkdir(f"{os.getcwd()}/plots/lt/testtest/mnist/")
-    plt.savefig(f"{os.getcwd()}/plots/lt/testtest/mnist/{args.prune_type}_AccuracyVsWeights.png",
+    checkdir(f"{os.getcwd()}/plots/lt/stmlpreal/mnist/")
+    plt.savefig(f"{os.getcwd()}/plots/lt/stmlpreal/mnist/{args.prune_type}_AccuracyVsWeights.png",
                 dpi=1200)
     plt.close()
 
@@ -468,6 +468,44 @@ def test(model, test_loader, criterion):
 #             step += 1
 #     step = 0
 
+# def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
+#     global step
+#     global mask
+#     global model
+#
+#     step = 0
+#     for name, param in model.named_parameters():
+#         if 'weight' in name:
+#             tensor = param.data.cpu().numpy()
+#
+#             # Fully Connected Layer
+#             if "fc" in name:
+#                 # 남아있는 가중치의 행(Row) 단위로 L2 노름 계산
+#                 # alive = tensor * mask[step]  # 현재 남아있는 가중치
+#                 row_norms = np.linalg.norm(tensor, axis=1)
+#                 percentile_value = np.percentile(row_norms[row_norms > 0], fc_percent)
+#
+#                 # 마스크 업데이트: 행 단위로 제거
+#                 new_mask = np.where(row_norms[:, None] < percentile_value, 0, mask[step])
+#
+#             # Convolutional Layer
+#             else:
+#                 # 남아있는 가중치의 필터 단위로 L2 노름 계산
+#                 # alive = tensor * mask[step]  # 현재 남아있는 가중치
+#                 filter_norms = np.linalg.norm(tensor.reshape(tensor.shape[0], -1), axis=1)
+#                 percentile_value = np.percentile(filter_norms[filter_norms > 0], conv_percent)
+#
+#                 # 마스크 업데이트: 필터 단위로 제거
+#                 new_mask = np.where(filter_norms[:, None, None, None] < percentile_value, 0, mask[step])
+#
+#             # 가중치 업데이트
+#             weight_dev = param.device
+#             param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
+#             mask[step] = new_mask
+#             step += 1
+#
+#     step = 0
+
 def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, **kwargs):
     global step
     global mask
@@ -476,34 +514,36 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
     step = 0
     for name, param in model.named_parameters():
         if 'weight' in name:
-            tensor = param.data.cpu().numpy()
-
-            # Fully Connected Layer
+            print(f"Processing layer: {name} with shape {param.shape}")
             if "fc" in name:
-                # 남아있는 가중치의 행(Row) 단위로 L2 노름 계산
-                # alive = tensor * mask[step]  # 현재 남아있는 가중치
-                row_norms = np.linalg.norm(tensor, axis=1)
-                percentile_value = np.percentile(row_norms[row_norms > 0], fc_percent)
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.mean(axis=1)  # Compute mean across axis 1 for FC layers
+                percentile_value = np.percentile(tensor[tensor > 0], fc_percent)
+            else:  # For convolutional layers
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.reshape(tensor.shape[0], -1).mean(axis=1)  # Flatten and compute mean
+                percentile_value = np.percentile(tensor[tensor > 0], conv_percent)
 
-                # 마스크 업데이트: 행 단위로 제거
-                new_mask = np.where(row_norms[:, None] < percentile_value, 0, mask[step])
+            print(f"Percentile value ({name}): {percentile_value}")
 
-            # Convolutional Layer
-            else:
-                # 남아있는 가중치의 필터 단위로 L2 노름 계산
-                # alive = tensor * mask[step]  # 현재 남아있는 가중치
-                filter_norms = np.linalg.norm(tensor.reshape(tensor.shape[0], -1), axis=1)
-                percentile_value = np.percentile(filter_norms[filter_norms > 0], conv_percent)
-
-                # 마스크 업데이트: 필터 단위로 제거
-                new_mask = np.where(filter_norms[:, None, None, None] < percentile_value, 0, mask[step])
-
-            # 가중치 업데이트
+            tensor2prune = param.data.cpu().numpy()
             weight_dev = param.device
-            param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
-            mask[step] = new_mask
-            step += 1
+            mask_in_structure = np.ones_like(tensor)
+            new_mask = np.where(abs(tensor) < percentile_value, 0, mask_in_structure)
 
+            # Reshape the mask to match the parameter's shape
+            mask_in_shape = np.ones(shape_param)
+            if "fc" in name:
+                mask_in_shape = mask_in_shape * new_mask[:, None]  # Expand for FC layers
+            else:
+                mask_in_shape = mask_in_shape * new_mask[:, None, None, None]  # Expand for Conv layers
+
+            param.data = torch.from_numpy(tensor2prune * mask_in_shape).float().to(weight_dev)
+            mask[step] = mask_in_shape
+            print(f"Applied mask to layer: {name}, Non-zero weights: {np.sum(mask_in_shape != 0)}")
+            step += 1
     step = 0
 
 # Function to make an empty mask of the same size as the model
