@@ -420,37 +420,36 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
     step = 0
     for name, param in model.named_parameters():
         if 'weight' in name:
-            tensor = param.data.cpu().numpy()
-            alive_mask = mask[step]
-
-            # Fully Connected Layer
+            print(f"Processing layer: {name} with shape {param.shape}")
             if "fc" in name:
-                # 남아있는 가중치의 행(Row) 단위로 L2 노름 계산
-                # alive = tensor * mask[step]  # 현재 남아있는 가중치
-                row_norms = np.linalg.norm(tensor, axis=1)
-                percentile_value = np.percentile(row_norms[row_norms > 0], fc_percent)
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.mean(axis=1)  # Compute mean across axis 1 for FC layers
+                percentile_value = np.percentile(tensor[tensor > 0], fc_percent)
+            else:  # For convolutional layers
+                tensor = abs(param.data.cpu().numpy())
+                shape_param = tensor.shape
+                tensor = tensor.reshape(tensor.shape[0], -1).mean(axis=1)  # Flatten and compute mean
+                percentile_value = np.percentile(tensor[tensor > 0], conv_percent)
 
-                # 마스크 업데이트: 행 단위로 제거
-                new_mask = np.where(row_norms[:, None] < percentile_value, 0, mask[step])
+            print(f"Percentile value ({name}): {percentile_value}")
 
-            # Convolutional Layer
-            else:
-                # 남아있는 가중치의 필터 단위로 L2 노름 계산
-                # alive = tensor * mask[step]  # 현재 남아있는 가중치
-                # filter_norms = np.linalg.norm(tensor.reshape(tensor.shape[0], -1), axis=1)
-                # percentile_value = np.percentile(filter_norms[filter_norms > 0], conv_percent)
-                filter_norms = np.linalg.norm(tensor.reshape(tensor.shape[0], -1), axis=1)
-                percentile_value = np.percentile(filter_norms[alive_mask.sum(axis=(1, 2, 3)) > 0], conv_percent)
-
-                # 마스크 업데이트: 필터 단위로 제거
-                new_mask = np.where(filter_norms[:, None, None, None] < percentile_value, 0, alive_mask)
-
-            # 가중치 업데이트
+            tensor2prune = param.data.cpu().numpy()
             weight_dev = param.device
-            param.data = torch.from_numpy(tensor * new_mask).to(weight_dev)
-            mask[step] = new_mask
-            step += 1
+            mask_in_structure = np.ones_like(tensor)
+            new_mask = np.where(abs(tensor) < percentile_value, 0, mask_in_structure)
 
+            # Reshape the mask to match the parameter's shape
+            mask_in_shape = np.ones(shape_param)
+            if "fc" in name:
+                mask_in_shape = mask_in_shape * new_mask[:, None]  # Expand for FC layers
+            else:
+                mask_in_shape = mask_in_shape * new_mask[:, None, None, None]  # Expand for Conv layers
+
+            param.data = torch.from_numpy(tensor2prune * mask_in_shape).float().to(weight_dev)
+            mask[step] = mask_in_shape
+            print(f"Applied mask to layer: {name}, Non-zero weights: {np.sum(mask_in_shape != 0)}")
+            step += 1
     step = 0
 
 # Function to make an empty mask of the same size as the model
