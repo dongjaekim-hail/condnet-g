@@ -43,9 +43,11 @@ for iteration in pruning_iterations:
 
 # 7. 플롯 생성
 fig, ax = plt.subplots(figsize=(12, 8))  # fig, ax 추가
-
+# cmap = plt.colormaps["Reds"]
 # 최신 방식으로 컬러맵 및 정규화 설정
-cmap = plt.colormaps["Reds"]  # 변경된 방식 사용
+colors = ["blue", "yellow", "red"]
+cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors, N=30)  # 30단계
+
 norm = mcolors.Normalize(vmin=0, vmax=29)
 
 for i, (iteration, df) in enumerate(dataframes.items()):
