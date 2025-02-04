@@ -272,12 +272,21 @@ api = Api()
 
 # 3. 원하는 Runs 찾기
 run_names = [
-    "unst_mlp_mnist_lth_real10",
-    "cond_mlp_schedule_s=7_v=0.2_tau=0.4",
     "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-",
+    "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use",
     "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11",
-    "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02"
+    "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02",
+    "unst_mlp_mnist_lth_real10",
+    "st_mlp_mnist_lth_real10",
 ]
+# run_names = [
+#     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti",
+#     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use",
+#     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11",
+#     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28",
+#     "unst_cnn_cifar10_lth_real10",
+#     "st_cnn_cifar10_lth_real10"
+# ]
 found_runs = {}
 
 runs = api.runs("hails/condg_mlp")
@@ -298,30 +307,10 @@ scaling_factor = 535040
 
 # 6. 첫 번째 Run (unst_mlp_mnist_lth_real10): Pruning Iteration 0~29 누적
 pruning_iterations = 30
-run_name_1 = "unst_mlp_mnist_lth_real10"
 cumulative_values = []
 
-for i in range(pruning_iterations):
-    key = f"Pruning Iteration {i}/test/epoch_tau"
-    history = found_runs[run_name_1].history(keys=[key])
-
-    if key in history:
-        epoch_tau_values = history[key].dropna().tolist()
-        scaled_values = [value * scaling_factor for value in epoch_tau_values]
-
-        if cumulative_values:
-            last_value = cumulative_values[-1]
-            cumulative_values.extend([last_value + val for val in pd.Series(scaled_values).cumsum()])
-        else:
-            cumulative_values.extend(pd.Series(scaled_values).cumsum())
-
-# X축 정규화
-total_steps_1 = len(cumulative_values)
-normalized_steps_1 = [s / total_steps_1 for s in range(1, total_steps_1 + 1)]
-cumulative_data[run_name_1] = (normalized_steps_1, cumulative_values)
-
 # 7. 나머지 Runs: test/epoch_tau 단순 누적
-for run_name in run_names[1:]:  # 첫 번째 Run은 이미 처리했으므로 나머지를 처리
+for run_name in run_names[0:4]:  # 첫 번째 Run은 이미 처리했으므로 나머지를 처리
     history = found_runs[run_name].history(keys=["test/epoch_tau"])
 
     if "test/epoch_tau" in history:
@@ -334,6 +323,29 @@ for run_name in run_names[1:]:  # 첫 번째 Run은 이미 처리했으므로 �
         normalized_steps = [s / total_steps for s in range(1, total_steps + 1)]
         cumulative_data[run_name] = (normalized_steps, cumulative_values)
 
+# 6. 첫 번째 Run (unst_mlp_mnist_lth_real10)과 st_mlp_mnist_lth_real10: Pruning Iteration 0~29 누적
+for run_name in ["unst_mlp_mnist_lth_real10", "st_mlp_mnist_lth_real10"]:
+    cumulative_values = []
+
+    for i in range(pruning_iterations):
+        key = f"Pruning Iteration {i}/test/epoch_tau"
+        history = found_runs[run_name].history(keys=[key])
+
+        if key in history:
+            epoch_tau_values = history[key].dropna().tolist()
+            scaled_values = [value * scaling_factor for value in epoch_tau_values]
+
+            if cumulative_values:
+                last_value = cumulative_values[-1]
+                cumulative_values.extend([last_value + val for val in pd.Series(scaled_values).cumsum()])
+            else:
+                cumulative_values.extend(pd.Series(scaled_values).cumsum())
+
+    # X축 정규화
+    total_steps = len(cumulative_values)
+    normalized_steps = [s / total_steps for s in range(1, total_steps + 1)]
+    cumulative_data[run_name] = (normalized_steps, cumulative_values)
+
 # # 8. 다섯 개의 누적 그래프 출력
 # plt.figure(figsize=(10, 6))
 # markers = ["o", "s", "^", "D", "x"]  # 각 라인의 마커 스타일 지정
@@ -344,16 +356,34 @@ for run_name in run_names[1:]:  # 첫 번째 Run은 이미 처리했으므로 �
 
 # 8. 다섯 개의 누적 그래프 출력 (색만 다르게, 선은 얇게)
 plt.figure(figsize=(10, 6))
-colors = ["blue", "red", "orange", "purple", "green"]  # 각 라인의 색 지정
+colors = ["blue", "black", "red", "orange", "purple", "green"]  # 각 라인의 색 지정
+
+# Run 이름을 짧고 명확하게 변경
+# legend_labels = {
+#     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti": "CondGNet (Ours)",
+#     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use": "CondNet",
+#     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11": "Runtime Activation Magnitude",
+#     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28": "Runtime Weight Magnitude",
+#     "unst_cnn_cifar10_lth_real10": "Unstructured LTH",
+#     "st_cnn_cifar10_lth_real10": "Structured LTH"
+# }
+legend_labels = {
+    "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-": "CondGNet (Ours)",
+    "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use": "CondNet",
+    "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11": "Runtime Activation Magnitude",
+    "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02": "Runtime Weight Magnitude",
+    "unst_mlp_mnist_lth_real10": "Unstructured LTH",
+    "st_mlp_mnist_lth_real10": "Structured LTH"
+}
 
 for i, (run_name, (x_vals, y_vals)) in enumerate(cumulative_data.items()):
-    plt.plot(x_vals, y_vals, color=colors[i], linewidth=0.5, label=run_name)  # 얇은 선, 색만 변경
+    plt.plot(x_vals, y_vals, color=colors[i], label=legend_labels[run_name])  # 얇은 선, 색만 변경
 
 
-plt.xlabel("Normalized Step (0 to 1)")
+plt.xlabel("Progress")
 plt.ylabel("Cumulative Flops")
-plt.title("Cumulative Flops over Normalized Steps for Multiple Runs")
-plt.legend()
+plt.title("Cumulative Flops for Multiple Runs (MLP)")
+plt.legend(loc="lower right", fontsize=8, framealpha=0.8)
 plt.grid(True)
 plt.xlim(left=0, right=1)  # X축을 0~1 범위로 설정
 plt.tight_layout()

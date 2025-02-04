@@ -14,10 +14,10 @@ plt.bar(x - width / 2, values[0::2], width, color='red', label='Shuffle')
 plt.bar(x + width / 2, values[1::2], width, color='blue', label='Not Shuffle')
 
 # 축 설정
-plt.ylabel('Value')
-plt.title('Grouped Bar Chart')
+plt.ylabel('Accuracy')
+plt.title('Specificity')
 # 사용자 지정 X축 라벨
-labels = ['CondGNet', 'CondNet', 'Runtime\nActivation Magnitude', 'Runtime\nWeight Magnitude']
+labels = ['CondGNet (Ours)', 'CondNet', 'Runtime\nActivation Magnitude', 'Runtime\nWeight Magnitude']
 plt.xticks(x, labels=labels)  # 라벨 적용 및 기울이기
 plt.ylim(0, 1)
 plt.legend()
