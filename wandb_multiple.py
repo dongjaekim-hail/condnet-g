@@ -56,33 +56,33 @@ if len(found_runs) != len(run_names):
 # 6. 각 run의 로그 데이터 추출
 dataframes = {}
 for name, run in found_runs.items():
-    history = run.scan_history(keys=["test/epoch_acc"])
+    history = run.scan_history(keys=["test/epoch_tau"])
 
-    epoch_acc_values = [row["test/epoch_acc"] for row in history if "test/epoch_acc" in row]
+    epoch_acc_values = [row["test/epoch_tau"] for row in history if "test/epoch_tau" in row]
 
     # Epoch을 1부터 900까지 자동 생성
     epochs = list(range(1, len(epoch_acc_values) + 1))
 
     print(f"\n{name} - Total Data Points Retrieved: {len(epoch_acc_values)}")
     for epoch, value in zip(epochs[:10], epoch_acc_values[:10]):  # 처음 10개만 출력
-        print(f"Epoch: {epoch}, Accuracy: {value}")
+        print(f"Epoch: {epoch}, Tau: {value}")
 
     dataframes[name] = pd.DataFrame({
         "Epoch": epochs,
-        "Accuracy": epoch_acc_values
+        "Tau": epoch_acc_values
     })
 
 # 7. 플롯 생성 (색상 및 커스텀 라벨 적용)
 plt.figure(figsize=(10, 6))
 for idx, name in enumerate(run_names):  # run_names 기준으로 순서 보장
     df = dataframes[name]
-    plt.plot(df["Epoch"], df["Accuracy"], color=colors[idx], label=legend_labels[name])
+    plt.plot(df["Epoch"], df["Tau"], color=colors[idx], label=legend_labels[name])
 
 
 plt.xlabel("Epoch")
-plt.ylabel("Test Accuracy")
-plt.title("Test Accuracy for Multiple Runs (CNN)")
-plt.legend()
+plt.ylabel("Test Tau")
+plt.title("Test Tau for Multiple Runs (CNN)")
+plt.legend(loc="lower right", fontsize=8, framealpha=0.8)
 plt.grid(True)
 plt.ylim(0, 1)
 plt.yticks(np.arange(0.0, 1.1, 0.1))
