@@ -19,15 +19,17 @@ run_names = [
     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use",
     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11",
     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28",
-    "st_cnn_cifar10_lth_real10"  # 추가된 Run
+    "unst_cnn_cifar10_lth_real10",
+    "st_cnn_cifar10_lth_real10",
 ]
-colors = ["blue", "black", "red", "orange", "green"]
+colors = ["blue", "black", "red", "orange", "purple", "green"]
 
 legend_labels = {
     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti": "CondGNet (Ours)",
     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use": "CondNet",
     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11": "Runtime Activation Magnitude",
     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28": "Runtime Weight Magnitude",
+    "unst_cnn_cifar10_lth_real10": r"Unstructured Pruning (LTH) $\tau=0.4$",
     "st_cnn_cifar10_lth_real10": r"Structured Pruning (LTH) $\tau=0.4$"
     # "st_cnn_cifar10_lth_real10": "Structured Pruning (LTH)"
 }
@@ -46,7 +48,7 @@ if len(found_runs) != len(run_names):
 # 6. 각 run의 로그 데이터 추출
 dataframes = {}
 for name, run in found_runs.items():
-    if name == "st_cnn_cifar10_lth_real10":
+    if name in ["st_cnn_cifar10_lth_real10", "unst_cnn_cifar10_lth_real10"]:
         history = run.scan_history(keys=["Pruning Iteration 8/test/epoch_tau"])
         epoch_acc_values = [row["Pruning Iteration 8/test/epoch_tau"] for row in history if
                             "Pruning Iteration 8/test/epoch_tau" in row]
@@ -56,7 +58,7 @@ for name, run in found_runs.items():
 
     epochs = list(range(1, len(epoch_acc_values) + 1))
 
-    if name == "st_cnn_cifar10_lth_real10":
+    if name in ["st_cnn_cifar10_lth_real10", "unst_cnn_cifar10_lth_real10"]:
         # 25~30 epoch의 mean 값 계산
         mean_tau = np.mean(epoch_acc_values[24:30])
 
@@ -77,7 +79,7 @@ for name, run in found_runs.items():
 plt.figure(figsize=(10, 6))
 for idx, name in enumerate(run_names):
     df = dataframes[name]
-    if name == "st_cnn_cifar10_lth_real10":
+    if name in ["st_cnn_cifar10_lth_real10", "unst_cnn_cifar10_lth_real10"]:
         plt.plot(df["Epoch"][:30], df["Tau"][:30], color=colors[idx], label=legend_labels[name], linestyle='-')  # 실선
         plt.plot(df["Epoch"][30:], df["Tau"][30:], color=colors[idx], linestyle='--')  # 점선
     else:
