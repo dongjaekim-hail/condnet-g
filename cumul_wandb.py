@@ -275,7 +275,7 @@ api = Api()
 #     "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-",
 #     "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use",
 #     "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11",
-#     "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02",
+#     "mlp_runtime_weight_magnitude_tau=0.6_2025-02-18_15-57-50",
 #     "unst_mlp_mnist_lth_real10",
 #     "st_mlp_mnist_lth_real10",
 # ]
@@ -303,7 +303,7 @@ if len(found_runs) != len(run_names):
 
 # 5. 누적 데이터를 저장할 딕셔너리
 cumulative_data = {}
-scaling_factor = 98306560
+scaling_factor = 535040
 
 # 6. 첫 번째 Run (unst_mlp_mnist_lth_real10): Pruning Iteration 0~29 누적
 pruning_iterations = 30
