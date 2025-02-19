@@ -11,26 +11,46 @@ wandb.login()
 api = Api()
 
 # 3. 원하는 프로젝트와 엔터티의 실행 목록 가져오기
-runs = api.runs("hails/condg_cnn")
+runs = api.runs("hails/condg_mlp")
 
 # 4. 특정 run 찾기
+# run_names = [
+#     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti",
+#     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use",
+#     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11",
+#     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28",
+#     "unst_cnn_cifar10_lth_real10",
+#     "st_cnn_cifar10_lth_real10",
+# ]
+# colors = ["blue", "black", "red", "orange", "purple", "green"]
+#
+# legend_labels = {
+#     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti": "CondGNet (Ours)",
+#     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use": "CondNet",
+#     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11": "Runtime Activation Magnitude",
+#     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28": "Runtime Weight Magnitude",
+#     "unst_cnn_cifar10_lth_real10": "Unstructured LTH",
+#     "st_cnn_cifar10_lth_real10": "Structured LTH"
+#     # "st_cnn_cifar10_lth_real10": "Structured Pruning (LTH)"
+# }
+
 run_names = [
-    "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti",
-    "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use",
-    "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11",
-    "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28",
-    "unst_cnn_cifar10_lth_real10",
-    "st_cnn_cifar10_lth_real10",
+    "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-",
+    "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use",
+    "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11",
+    "mlp_runtime_weight_magnitude_tau=0.6_2025-02-18_15-57-50",
+    "unst_mlp_mnist_lth_real10",
+    "st_mlp_mnist_lth_real10",
 ]
 colors = ["blue", "black", "red", "orange", "purple", "green"]
 
 legend_labels = {
-    "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti": "CondGNet (Ours)",
-    "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use": "CondNet",
-    "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11": "Runtime Activation Magnitude",
-    "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28": "Runtime Weight Magnitude",
-    "unst_cnn_cifar10_lth_real10": r"Unstructured Pruning (LTH) $\tau=0.4$",
-    "st_cnn_cifar10_lth_real10": r"Structured Pruning (LTH) $\tau=0.4$"
+    "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-": "CondGNet (Ours)",
+    "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use": "CondNet",
+    "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11": "Runtime Activation Magnitude",
+    "mlp_runtime_weight_magnitude_tau=0.6_2025-02-18_15-57-50": "Runtime Weight Magnitude",
+    "unst_mlp_mnist_lth_real10": "Unstructured LTH",
+    "st_mlp_mnist_lth_real10": "Structured LTH"
     # "st_cnn_cifar10_lth_real10": "Structured Pruning (LTH)"
 }
 
@@ -48,19 +68,19 @@ if len(found_runs) != len(run_names):
 # 6. 각 run의 로그 데이터 추출
 dataframes = {}
 for name, run in found_runs.items():
-    if name in ["st_cnn_cifar10_lth_real10", "unst_cnn_cifar10_lth_real10"]:
-        history = run.scan_history(keys=["Pruning Iteration 8/test/epoch_tau"])
-        epoch_acc_values = [row["Pruning Iteration 8/test/epoch_tau"] for row in history if
-                            "Pruning Iteration 8/test/epoch_tau" in row]
+    if name in ["st_mlp_mnist_lth_real10", "unst_mlp_mnist_lth_real10"]:
+        history = run.scan_history(keys=["Pruning Iteration 5/test/epoch_tau"])
+        epoch_acc_values = [row["Pruning Iteration 5/test/epoch_tau"] for row in history if
+                            "Pruning Iteration 5/test/epoch_tau" in row]
     else:
         history = run.scan_history(keys=["test/epoch_tau"])
         epoch_acc_values = [row["test/epoch_tau"] for row in history if "test/epoch_tau" in row]
 
     epochs = list(range(1, len(epoch_acc_values) + 1))
 
-    if name in ["st_cnn_cifar10_lth_real10", "unst_cnn_cifar10_lth_real10"]:
+    if name in ["st_mlp_mnist_lth_real10", "unst_mlp_mnist_lth_real10"]:
         # 25~30 epoch의 mean 값 계산
-        mean_tau = np.mean(epoch_acc_values[24:30])
+        mean_tau = np.mean(epoch_acc_values[27:30])
 
         # 31~200 epoch을 mean_tau로 연장
         extended_epochs = list(range(31, 201))
@@ -79,7 +99,7 @@ for name, run in found_runs.items():
 plt.figure(figsize=(10, 6))
 for idx, name in enumerate(run_names):
     df = dataframes[name]
-    if name in ["st_cnn_cifar10_lth_real10", "unst_cnn_cifar10_lth_real10"]:
+    if name in ["st_mlp_mnist_lth_real10", "unst_mlp_mnist_lth_real10"]:
         plt.plot(df["Epoch"][:30], df["Tau"][:30], color=colors[idx], label=legend_labels[name], linestyle='-')  # 실선
         plt.plot(df["Epoch"][30:], df["Tau"][30:], color=colors[idx], linestyle='--')  # 점선
     else:
@@ -88,7 +108,7 @@ for idx, name in enumerate(run_names):
 
 plt.xlabel("Epoch")
 plt.ylabel("Test Tau")
-plt.title("Test Tau for Multiple Runs (CNN)")
+plt.title("Test Tau for Multiple Runs (MLP)")
 plt.legend(loc="lower right", fontsize=8, framealpha=0.8)
 plt.grid(True)
 plt.ylim(0, 1)
