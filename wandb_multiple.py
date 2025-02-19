@@ -11,36 +11,36 @@ wandb.login()
 api = Api()
 
 # 3. 원하는 프로젝트와 엔터티의 실행 목록 가져오기
-runs = api.runs("hails/condg_cnn")
+runs = api.runs("hails/condg_mlp")
 
 # 4. 특정 run 찾기
-# run_names = [
-#     "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-",
-#     "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use",
-#     "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11",
-#     "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02"
-# ]
 run_names = [
-    "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti",
-    "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use",
-    "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11",
-    "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28"
+    "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-",
+    "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use",
+    "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11",
+    "mlp_runtime_weight_magnitude_tau=0.6_2025-02-18_15-57-50"
 ]
+# run_names = [
+#     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti",
+#     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use",
+#     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11",
+#     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28"
+# ]
 colors = ["blue", "black", "red", "orange"]  # unst = purple, st = green
 
 # 🔹 Run Name을 원하는 라벨로 변환
-# legend_labels = {
-#     "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-": "CondGNet (Ours)",
-#     "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use": "CondNet",
-#     "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11": "Runtime Activation Magnitude",
-#     "mlp_runtime_weight_magnitude_tau=0.6_2024-12-09_17-23-02": "Runtime Weight Magnitude"
-# }
 legend_labels = {
-    "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti": "CondGNet (Ours)",
-    "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use": "CondNet",
-    "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11": "Runtime Activation Magnitude",
-    "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28": "Runtime Weight Magnitude"
+    "condg_mlp_schedule_s=7.0_v=0.2_tau=0.3_paper_ti-": "CondGNet (Ours)",
+    "cond_mlp_schedule_s=7_v=0.2_tau=0.4_paper_use": "CondNet",
+    "mlp_runtime_activation_magnitude_tau=0.6_2024-12-09_17-23-11": "Runtime Activation Magnitude",
+    "mlp_runtime_weight_magnitude_tau=0.6_2025-02-18_15-57-50": "Runtime Weight Magnitude"
 }
+# legend_labels = {
+#     "condg_cnn_schedule_s=7.0_v=0.5_tau=0.3_paper_ti": "CondGNet (Ours)",
+#     "cond_cnn_schedule_s=7_v=0.5_tau=0.3_paper_use": "CondNet",
+#     "cnn_runtime_activation_magnitude_tau=0.4_2024-12-08_15-08-11": "Runtime Activation Magnitude",
+#     "cnn_runtime_weight_magnitude_tau=0.4_2024-12-08_15-08-28": "Runtime Weight Magnitude"
+# }
 
 found_runs = {}
 for run in runs:
@@ -81,7 +81,7 @@ for idx, name in enumerate(run_names):  # run_names 기준으로 순서 보장
 
 plt.xlabel("Epoch")
 plt.ylabel("Test Tau")
-plt.title("Test Tau for Multiple Runs (CNN)")
+plt.title("Test Tau for Multiple Runs (MLP)")
 plt.legend(loc="lower right", fontsize=8, framealpha=0.8)
 plt.grid(True)
 plt.ylim(0, 1)
