@@ -353,6 +353,18 @@ def main():
 
 
             us, p = gnn_policy(hs, adj_batch)  # run gnn
+            # TODO: check if we prune bias
+            # n_active_weight = 0
+            # total_number = 0
+            # # for
+            # us0 = us[:,:784]
+            # us1 = us[:,784:784+512]
+            # layer_1 =(torch.matmul(us1.T,us0))/200 # 이게 전체 bs 중에서 서로 연결된 비율
+            # layer_2
+            # layer_3
+            # 이 사이에 있는 weight 는 512 x 784 의 weight 가 있는데
+            # 이 중에서 784 랑 512가 둘다 켜진 녀석들만 켜진다
+
             outputs, hs = mlp_model(inputs, cond_drop=True, us=us.detach())
 
             y_one_hot = torch.zeros(labels.shape[0], 10)

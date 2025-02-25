@@ -393,15 +393,9 @@ def prune_by_percentile(conv_percent, fc_percent, resample=False, reinit=False, 
     for name, param in model.named_parameters():
 
         if 'weight' in name:
-            if "fc.weight" in name:
-                tensor = param.data.cpu().numpy()
-                alive = tensor[np.nonzero(tensor)]
-                percentile_value = np.percentile(abs(alive), fc_percent)
-            else:
-                tensor = param.data.cpu().numpy()
-                alive = tensor[np.nonzero(tensor)]
-                percentile_value = np.percentile(abs(alive), conv_percent)
-
+            tensor = param.data.cpu().numpy()
+            alive = tensor[np.nonzero(tensor)]
+            percentile_value = np.percentile(abs(alive), fc_percent)
             weight_dev = param.device
             new_mask = np.where(abs(tensor) < percentile_value, 0, mask[step])
 
