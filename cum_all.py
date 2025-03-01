@@ -396,7 +396,7 @@ yticks, ylabels = plt.yticks()
 new_ylabels = [str(int(tick)) if tick == 0 else label for tick, label in zip(yticks, ylabels)]
 
 # 새로운 Y축 설정
-plt.yticks(yticks, new_ylabels)
+plt.yticks(yticks, new_ylabels, fontsize=9)
 
 # X축 0.0 제거, 1.0을 1로 변경 (부동소수점 문제 해결)
 xticks, _ = plt.xticks()
