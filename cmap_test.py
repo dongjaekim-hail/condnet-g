@@ -62,12 +62,12 @@ for i, (iteration, df) in enumerate(dataframes.items()):
 # cbar.ax.tick_params(labelsize=9)  # 컬러바 눈금 폰트 크기 설정
 # cbar.set_label("Pruning Iteration", fontsize=9)
 
-# cbar_ax = fig.add_axes([0.82, 0.22, 0.02, 0.3])  # [left, bottom, width, height]
-# sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-# sm.set_array([])  # 빈 배열 설정
-# cbar = plt.colorbar(sm, cax=cbar_ax)
-# cbar.ax.tick_params(labelsize=9)  # 컬러바 눈금 폰트 크기 설정
-# cbar.set_label("Pruning Iteration", fontsize=9)
+cbar_ax = fig.add_axes([0.82, 0.22, 0.02, 0.3])  # [left, bottom, width, height]
+sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+sm.set_array([])  # 빈 배열 설정
+cbar = plt.colorbar(sm, cax=cbar_ax)
+cbar.ax.tick_params(labelsize=9)  # 컬러바 눈금 폰트 크기 설정
+cbar.set_label("Pruning Iteration", fontsize=9)
 
 # 축 및 제목 설정
 ax.set_xlabel("Epoch", fontsize=9)
@@ -83,8 +83,8 @@ ax.set_yticks(y_ticks)
 ax.set_yticklabels(["0" if i == 0 else f"{i:.1f}" if i != 1 else "1" for i in y_ticks])
 
 plt.tight_layout()
-
-ax = plt.gca()
+plt.draw()
+# ax = plt.gca()
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 
