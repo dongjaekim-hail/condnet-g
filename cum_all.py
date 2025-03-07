@@ -356,7 +356,10 @@ for run_name in ["unst_mlp_mnist_lth_real10", "st_mlp_mnist_lth_real10"]:
 #     plt.plot(x_vals, y_vals, marker=markers[i], linestyle=linestyles[i], label=run_name)
 
 # 8. 다섯 개의 누적 그래프 출력 (색만 다르게, 선은 얇게)
-plt.figure(figsize=(5.33, 3.198))
+
+fontsize = 9
+# plt.figure(figsize=(5.33, 3.198))
+plt.figure(figsize=(2.8, 2.6))
 colors = ["blue", "black", "red", "orange", "purple", "green"]  # 각 라인의 색 지정
 
 # Run 이름을 짧고 명확하게 변경
@@ -381,10 +384,10 @@ for i, (run_name, (x_vals, y_vals)) in enumerate(cumulative_data.items()):
     plt.plot(x_vals, y_vals, color=colors[i], label=legend_labels[run_name])  # 얇은 선, 색만 변경
 
 
-plt.xlabel("Progress", fontsize=9)
-plt.ylabel("Cumulative Flops (1e8)", fontsize=9)
+plt.xlabel("Progress", fontsize=fontsize)
+plt.ylabel(r"Cumulative Flops ($10^8$)", fontsize=fontsize)
 plt.title("")
-plt.legend(loc="upper left", fontsize=9, framealpha=0.8)
+plt.legend(loc="upper left", fontsize=fontsize*0.7, framealpha=1, edgecolor="black")
 plt.grid(False)
 plt.ylim(bottom=0)
 plt.xlim(left=0, right=1)  # X축을 0~1 범위로 설정
@@ -396,7 +399,7 @@ yticks, ylabels = plt.yticks()
 new_ylabels = [str(int(tick)) if tick == 0 else label for tick, label in zip(yticks, ylabels)]
 
 # 새로운 Y축 설정
-plt.yticks(yticks, new_ylabels, fontsize=9)
+plt.yticks(yticks, new_ylabels, fontsize=fontsize)
 
 # X축 0.0 제거, 1.0을 1로 변경 (부동소수점 문제 해결)
 xticks, _ = plt.xticks()
@@ -409,7 +412,7 @@ xticks = [tick for tick in xticks if tick != 0.0]
 xtick_labels = [str(int(tick)) if np.isclose(tick, 1.0) else str(tick) for tick in xticks]
 
 # X축 설정
-plt.xticks(xticks, xtick_labels, fontsize=9)
+plt.xticks(xticks, xtick_labels, fontsize=fontsize)
 
 plt.tight_layout()
 
@@ -418,7 +421,8 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 
 # 9. 그래프 출력
-plt.show()
+plt.savefig("fig1.pdf", format="pdf", bbox_inches = 'tight')
+# plt.show()
 
 # 10. CSV 파일 저장
 for run_name, (x_vals, y_vals) in cumulative_data.items():
