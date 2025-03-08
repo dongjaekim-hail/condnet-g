@@ -397,16 +397,14 @@ plt.ylim(bottom=0)
 plt.xlim(left=0, right=1)  # X축을 0~1 범위로 설정
 
 # 기존 yticks 가져오기
-yticks, ylabels = plt.yticks()
+# yticks, ylabels = plt.yticks()
+
+# Y축 눈금 설정 (0, 100M, 200M만 표시)
+yticks = [0, 100000000, 200000000]
 
 # Y축 0.00을 0으로 변경 (나머지는 그대로 유지)
 # new_ylabels = [str(int(tick)) if tick == 0 else label for tick, label in zip(yticks, ylabels)]
-new_ylabels = [
-    "0" if tick == 0 else
-    "2" if tick == 200000000 else
-    label
-    for tick, label in zip(yticks, ylabels)
-]
+new_ylabels = ["0", "1", "2"]
 
 # 새로운 Y축 설정
 plt.yticks(yticks, new_ylabels, fontsize=9)
