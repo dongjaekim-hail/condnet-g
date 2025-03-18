@@ -43,7 +43,7 @@ plt.figure(figsize=(5.2, 0.3))
 
 # 범례 아이템 생성
 legend_patches = [
-    mpatches.Rectangle((0, 0), 2, 0.5, facecolor=fill, edgecolor=border, linewidth=1.5)
+    mpatches.Rectangle((0, 0), 2, 0.5, facecolor=fill, edgecolor=border, linewidth=1)
     for fill, border in legend_labels.values()
 ]
 
@@ -64,4 +64,4 @@ plt.axis("off")
 plt.tight_layout()
 
 # 그래프 출력
-plt.savefig("bar_legend.pdf", format="pdf", bbox_inches = 'tight')
+plt.savefig("bar_legends.pdf", format="pdf", bbox_inches = 'tight')

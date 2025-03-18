@@ -107,7 +107,7 @@ ax[0].set_ylabel("Accuracy", fontsize=9)
 ax[0].tick_params(axis='both', labelsize=9)
 ax[0].grid(False)
 ax[0].set_xlim(left=1, right=30)
-ax[0].set_xticks([15, 30], labels=["15", "30"], fontsize=9)
+ax[0].set_xticks([10, 20, 30], labels=["10", "20", "30"], fontsize=9)
 ax[0].set_ylim(0, 1.0)  # y축 범위 설정
 # ax.set_yticks([i / 10 for i in range(11)])  # y축 눈금 0.1 단위
 y_ticks = np.arange(0, 1.1, 0.2)
@@ -145,7 +145,7 @@ ax[1].set_xlabel("Epoch", fontsize=9)
 ax[1].tick_params(axis='both', labelsize=9)
 ax[1].grid(False)
 ax[1].set_xlim(left=1, right=30)
-ax[1].set_xticks([15, 30], labels=["15", "30"], fontsize=9)
+ax[1].set_xticks([10, 20, 30], labels=["10", "20", "30"], fontsize=9)
 ax[1].set_ylim(0, 1.0)  # y축 범위 설정
 # ax.set_yticks([i / 10 for i in range(11)])  # y축 눈금 0.1 단위
 y_ticks = np.arange(0, 1.1, 0.2)
@@ -247,9 +247,9 @@ ax[2].set_ylim(0, 1)
 y_ticks = np.arange(0, 1.1, 0.2)
 ax[2].set_yticks(y_ticks, labels=["0" if i == 0 else f"{i:.1f}" if i != 1 else "1" for i in y_ticks], fontsize=9)
 ax[2].set_xlim(1, 900)  # Epoch 범위를 1~900으로 설정
-ax[2].set_xticks([450, 900], labels=["450", "900"], fontsize=9)
+ax[2].set_xticks([300, 600, 900], labels=["300", "600", "900"], fontsize=9)
 
 ax[2].spines["top"].set_visible(False)
 ax[2].spines["right"].set_visible(False)
 
-plt.savefig("mlp_lth_sub.pdf", format="pdf", bbox_inches='tight')
+plt.savefig("mlp_lth_subs.pdf", format="pdf", bbox_inches='tight')

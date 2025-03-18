@@ -142,17 +142,19 @@ for i in range(2):
     ax[i].set_xticks(xticks)
     ax[i].set_xticklabels(xtick_labels, fontsize=9)
 
-ax[0].set_ylabel(r"Cumulative Flops ($10^{8}$)", fontsize=9)
-ax[1].set_ylabel(r"Cumulative Flops ($10^{10}$)", fontsize=9)
+ax[0].set_ylabel(r"Cumulative GFlops", fontsize=9)
+ax[1].set_ylabel(r"Cumulative GFlops", fontsize=9)
 
 yticks = [0, 100000000, 200000000]
-new_ylabels = ["0", "1", "2"]
+new_ylabels = ["0", "0.1", "0.2"]
 ax[0].set_yticks(yticks)
 ax[0].set_yticklabels(new_ylabels, fontsize=9)
 
-yticks, ylabels = ax[1].get_yticks(), ax[1].get_yticklabels()
-new_ylabels = [str(int(tick)) if tick == 0 else label.get_text() for tick, label in zip(yticks, ylabels)]
+# yticks, ylabels = ax[1].get_yticks(), ax[1].get_yticklabels()
+# new_ylabels = [str(int(tick)) if tick == 0 else label.get_text() for tick, label in zip(yticks, ylabels)]
+yticks = [0, 10000000000, 20000000000, 30000000000]
+new_ylabels = ["0", "10", "20", "30"]
 ax[1].set_yticks(yticks)
 ax[1].set_yticklabels(new_ylabels, fontsize=9)
 
-plt.savefig("cum_sub.pdf", format="pdf", bbox_inches='tight')
+plt.savefig("cum_subs.pdf", format="pdf", bbox_inches='tight')
