@@ -1,5 +1,5 @@
-# CondGNet
-Branch -> sjusju
+# Branch
+sjusju
 
 # CondGNet
 mlp  
