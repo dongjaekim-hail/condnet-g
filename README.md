@@ -1,8 +1,8 @@
 # CondGNet
-mlp  
+MLP  
 condg_mlp_scheduler.py 
 
-cnn  
+CNN  
 condg_cnn_scheduler.py
   
 
@@ -22,26 +22,34 @@ condg_cnn_scheduler.py
 | Epoch              | 200     | 200     |
 
 # CondNet
-mlp  
+MLP  
 mlp_mnist_cond_out.py 
 
-cnn  
+CNN  
 cnn_cifar10_cond_out.py
 
 # LTH
-mlp  
-mlp_mnist_unstruc_reallth_tau.py    
-mlp_mnist_struc_reallth_tau.py
+MLP  
+mlp_mnist_unstruc_reallth_tau.py -> unstructured    
+mlp_mnist_struc_reallth_tau.py -> structured
 
-cnn  
-cnn_cifar10_unstruc_reallth_tau.py    
-cnn_cifar10_struc_reallth_tau.py
+CNN  
+cnn_cifar10_unstruc_reallth_tau.py -> unstructured    
+cnn_cifar10_struc_reallth_tau.py -> structured
 
 # Runtime Magnitude Based Pruning
-mlp  
-mlp_mnist_runtime_weight_out.py     
-mlp_mnist_runtime_activation_out.py
+MLP  
+mlp_mnist_runtime_weight_out.py -> weight based     
+mlp_mnist_runtime_activation_out.py -> activation based
 
-cnn  
-cnn_cifar10_runtime_weight_out.py     
-cnn_cifar10_runtime_activation_out2.py
+CNN  
+cnn_cifar10_runtime_weight_out.py -> weight based      
+cnn_cifar10_runtime_activation_out2.py -> activation based
+
+# Plot
+plot_barlegend.py -> bar graph legend   
+plot_legend.py -> allacctau, cum legend  
+plot_sub_allacctau.py -> all model acc, tau graph    
+plot_sub_bar.py -> all model specificity bar graph  
+plot_sub_cum.py -> all model GFLOPS graph   
+plot_sub_lth.py -> unstructured, structured lth acc, tau graph (total pruning iterations)
