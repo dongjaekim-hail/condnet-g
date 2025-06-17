@@ -52,4 +52,4 @@ plot_legend.py -> allacctau, cum legend
 plot_sub_allacctau.py -> all model acc, tau graph    
 plot_sub_bar.py -> all model specificity bar graph  
 plot_sub_cum.py -> all model GFLOPS graph   
-plot_sub_lth.py -> unstructured, structured lth acc, tay graph (total pruning iterations)
+plot_sub_lth.py -> unstructured, structured lth acc, tau graph (total pruning iterations)
